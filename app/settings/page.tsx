@@ -70,7 +70,9 @@ export default function SettingsPage() {
   ];
 
   const fetchJiraTickets = React.useCallback(async () => {
-    if (!user?.jira) return;
+    // Read fresh state to avoid stale closure
+    const jira = useStore.getState().user?.jira;
+    if (!jira?.accessToken || !jira?.cloudId || !jira?.accountId) return;
     setJiraLoading(true);
     setJiraError(null);
     try {
@@ -78,10 +80,10 @@ export default function SettingsPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accessToken: user.jira.accessToken,
-          cloudId: user.jira.cloudId,
-          accountId: user.jira.accountId,
-          cloudUrl: user.jira.cloudUrl,
+          accessToken: jira.accessToken,
+          cloudId: jira.cloudId,
+          accountId: jira.accountId,
+          cloudUrl: jira.cloudUrl,
         }),
       });
       const data = await res.json();
@@ -92,7 +94,7 @@ export default function SettingsPage() {
     } finally {
       setJiraLoading(false);
     }
-  }, [user?.jira]);
+  }, []); // always reads fresh from store.getState()
 
   // Auto-fetch tickets when Jira is connected
   React.useEffect(() => {

@@ -10,7 +10,8 @@ export async function POST(req: NextRequest) {
     const { accessToken, cloudId, accountId, cloudUrl } = await req.json();
 
     if (!accessToken || !cloudId || !accountId) {
-      return NextResponse.json({ error: 'Missing accessToken, cloudId or accountId' }, { status: 400 });
+      const missing = [!accessToken && 'accessToken', !cloudId && 'cloudId', !accountId && 'accountId'].filter(Boolean).join(', ');
+      return NextResponse.json({ error: `Missing: ${missing}` }, { status: 400 });
     }
 
     // Use accountId directly — currentUser() doesn't work with OAuth 2.0 (3LO)
