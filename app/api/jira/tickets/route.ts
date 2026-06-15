@@ -9,15 +9,16 @@ export async function POST(req: NextRequest) {
   try {
     const { accessToken, cloudId, accountId, cloudUrl } = await req.json();
 
-    if (!accessToken || !cloudId || !accountId) {
-      const missing = [!accessToken && 'accessToken', !cloudId && 'cloudId', !accountId && 'accountId'].filter(Boolean).join(', ');
-      return NextResponse.json({ error: `Missing: ${missing}` }, { status: 400 });
+    if (!accessToken || !cloudId) {
+      return NextResponse.json({ error: 'Missing accessToken or cloudId' }, { status: 400 });
     }
 
-    // Use accountId directly — currentUser() doesn't work with OAuth 2.0 (3LO)
-    const jql = encodeURIComponent(
-      `assignee = "${accountId}" ORDER BY updated DESC`
-    );
+    // Use currentUser() - works with OAuth 2.0 when read:jira-work scope is granted
+    // Fallback: assignee by accountId if provided
+    const jqlBase = accountId
+      ? `assignee = "${accountId}" OR assignee = currentUser()`
+      : `assignee = currentUser()`;
+    const jql = encodeURIComponent(`(${jqlBase}) ORDER BY updated DESC`);
     const fields = 'summary,status,priority,project,customfield_10020,updated';
 
     const res = await fetch(
@@ -35,7 +36,9 @@ export async function POST(req: NextRequest) {
     }
 
     if (!res.ok) {
-      return NextResponse.json({ error: `Jira API error: ${res.status}` }, { status: 502 });
+      const errBody = await res.text();
+      console.error('[Jira tickets] API error', res.status, errBody);
+      return NextResponse.json({ error: `Jira API error: ${res.status}`, detail: errBody }, { status: 502 });
     }
 
     const data = await res.json();
