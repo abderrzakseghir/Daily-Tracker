@@ -51,17 +51,11 @@ export default function SettingsPage() {
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const jiraStatus = params.get('jira');
-    if (jiraStatus === 'connected') {
-      // Replace URL without reloading
+    if (jiraStatus === 'error') {
       window.history.replaceState({}, '', '/settings');
-      fetch('/api/auth/jira/session')
-        .then((r) => r.json())
-        .then(({ connection }) => {
-          if (connection) connectJira(connection);
-        })
-        .catch(() => {});
+      setJiraError('La connexion Jira a échoué. Réessayez.');
     }
-  }, [connectJira]);
+  }, []);
 
   React.useEffect(() => {
     if (!isAuthenticated) {

@@ -61,9 +61,8 @@ export async function GET(req: NextRequest) {
       expiresAt: Date.now() + (tokens.expires_in ?? 3600) * 1000,
     };
 
-    // Store connection data in a short-lived httpOnly cookie
-    // Client claims it once via /api/auth/jira/session, then it's deleted
-    const response = NextResponse.redirect(`${appUrl}/settings?jira=connected`);
+    // Redirect to dedicated intermediate page (no auth guard) to avoid race condition
+    const response = NextResponse.redirect(`${appUrl}/jira-connect`);
 
     response.cookies.set('jira_connection', JSON.stringify(connection), {
       httpOnly: true,
