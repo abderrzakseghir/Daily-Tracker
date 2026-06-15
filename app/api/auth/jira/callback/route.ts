@@ -61,16 +61,9 @@ export async function GET(req: NextRequest) {
       expiresAt: Date.now() + (tokens.expires_in ?? 3600) * 1000,
     };
 
-    // Redirect to dedicated intermediate page (no auth guard) to avoid race condition
-    const response = NextResponse.redirect(`${appUrl}/jira-connect`);
-
-    response.cookies.set('jira_connection', JSON.stringify(connection), {
-      httpOnly: true,
-      sameSite: 'lax',
-      maxAge: 60, // 60 seconds to claim
-      path: '/',
-    });
-
+    // Encode connection as base64 and pass via URL fragment (never sent to server, cleared immediately by client)
+    const encoded = Buffer.from(JSON.stringify(connection)).toString('base64url');
+    const response = NextResponse.redirect(`${appUrl}/jira-connect#${encoded}`);
     response.cookies.delete('jira_oauth_state');
     return response;
   } catch (err) {

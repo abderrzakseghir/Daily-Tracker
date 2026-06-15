@@ -6,8 +6,8 @@ import { useStore } from '@/lib/store';
 
 /**
  * Intermediate page for Jira OAuth callback.
- * No auth guard — claims the httpOnly cookie set by the callback route
- * and stores the connection in Zustand before redirecting to Settings.
+ * No auth guard — reads connection data from URL fragment (never sent to server),
+ * stores it in Zustand, clears the URL, then redirects to Settings.
  */
 export default function JiraConnectPage() {
   const router = useRouter();
@@ -15,23 +15,23 @@ export default function JiraConnectPage() {
   const [status, setStatus] = React.useState<'loading' | 'error'>('loading');
 
   React.useEffect(() => {
-    fetch('/api/auth/jira/session')
-      .then((r) => r.json())
-      .then(({ connection, error }) => {
-        if (connection) {
-          connectJira(connection);
-          router.replace('/settings');
-        } else {
-          console.error('[jira-connect] No connection in session:', error);
-          setStatus('error');
-          setTimeout(() => router.replace('/settings?jira=error'), 2000);
-        }
-      })
-      .catch((err) => {
-        console.error('[jira-connect]', err);
-        setStatus('error');
-        setTimeout(() => router.replace('/settings?jira=error'), 2000);
-      });
+    try {
+      const hash = window.location.hash.slice(1); // remove leading #
+      if (!hash) throw new Error('No data in URL fragment');
+
+      const connection = JSON.parse(atob(hash.replace(/-/g, '+').replace(/_/g, '/')));
+      if (!connection?.accountId) throw new Error('Invalid connection data');
+
+      // Clear the fragment from URL immediately (tokens should not stay in history)
+      window.history.replaceState(null, '', window.location.pathname);
+
+      connectJira(connection);
+      router.replace('/settings');
+    } catch (err) {
+      console.error('[jira-connect]', err);
+      setStatus('error');
+      setTimeout(() => router.replace('/settings?jira=error'), 2000);
+    }
   }, [connectJira, router]);
 
   return (
