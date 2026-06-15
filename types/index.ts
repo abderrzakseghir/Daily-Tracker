@@ -122,12 +122,36 @@ export interface DailyEntryUpdateInput {
 // USER
 // -------------------------
 
+export interface JiraConnection {
+  accountId: string;
+  displayName: string;
+  email: string;
+  cloudId: string;
+  cloudUrl: string;
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number; // Unix timestamp ms
+}
+
+export interface JiraTicket {
+  key: string;          // "PROJ-123"
+  summary: string;
+  status: string;
+  priority: string;
+  project: string;
+  projectKey: string;
+  sprint?: string;
+  updatedAt: string;
+  url: string;
+}
+
 export interface User {
   id: string;
   name: string;
   pin: string; // hashed PIN
   email?: string;
   avatar?: string;
+  jira?: JiraConnection;
   settings: UserSettings;
   gamification: UserGamification;
   createdAt: string;

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DailyEntry, User, Task, PlannedTask, UserGamification, Badge, BadgeType } from '@/types';
+import { DailyEntry, User, Task, PlannedTask, UserGamification, Badge, BadgeType, JiraConnection, JiraTicket } from '@/types';
 import { generateId } from '@/lib/utils';
 import { calculateStreak, calculateLevel, calculateExperience } from '@/lib/calculations';
 
@@ -44,6 +44,12 @@ interface AppState {
   // Actions - Gamification
   updateGamification: () => void;
   checkBadges: () => BadgeType[];
+
+  // Actions - Jira
+  connectJira: (connection: JiraConnection) => void;
+  disconnectJira: () => void;
+  setJiraTickets: (tickets: JiraTicket[]) => void;
+  jiraTickets: JiraTicket[];
 
   // Utilities
   setError: (error: string | null) => void;
@@ -383,6 +389,24 @@ export const useStore = create<AppState>()(
         return newBadges;
       },
 
+      // Jira Actions
+      jiraTickets: [],
+
+      connectJira: (connection) => {
+        const { user } = get();
+        if (!user) return;
+        set({ user: { ...user, jira: connection, updatedAt: new Date().toISOString() } });
+      },
+
+      disconnectJira: () => {
+        const { user } = get();
+        if (!user) return;
+        const { jira: _, ...userWithoutJira } = user;
+        set({ user: { ...userWithoutJira, updatedAt: new Date().toISOString() }, jiraTickets: [] });
+      },
+
+      setJiraTickets: (tickets) => set({ jiraTickets: tickets }),
+
       // Utilities
       setError: (error) => set({ error }),
       clearError: () => set({ error: null }),
@@ -393,6 +417,7 @@ export const useStore = create<AppState>()(
         user: state.user,
         entries: state.entries,
         isAuthenticated: state.isAuthenticated,
+        jiraTickets: state.jiraTickets,
       }),
     }
   )

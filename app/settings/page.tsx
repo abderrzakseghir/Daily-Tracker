@@ -21,7 +21,11 @@ import {
   Sun,
   Monitor,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Link2,
+  Link2Off,
+  RefreshCw,
+  ExternalLink,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 
@@ -33,10 +37,31 @@ export default function SettingsPage() {
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(
     user?.settings.notificationsEnabled || false
   );
+  const [jiraTickets, setJiraTickets] = React.useState<import('@/types').JiraTicket[]>([]);
+  const [jiraLoading, setJiraLoading] = React.useState(false);
+  const [jiraError, setJiraError] = React.useState<string | null>(null);
+
+  const { connectJira, disconnectJira } = useStore();
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Claim Jira connection after OAuth redirect
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const jiraStatus = params.get('jira');
+    if (jiraStatus === 'connected') {
+      // Replace URL without reloading
+      window.history.replaceState({}, '', '/settings');
+      fetch('/api/auth/jira/session')
+        .then((r) => r.json())
+        .then(({ connection }) => {
+          if (connection) connectJira(connection);
+        })
+        .catch(() => {});
+    }
+  }, [connectJira]);
 
   React.useEffect(() => {
     if (!isAuthenticated) {
@@ -49,6 +74,34 @@ export default function SettingsPage() {
     { value: 'light', label: 'Clair', icon: <Sun className="h-4 w-4" /> },
     { value: 'dark', label: 'Sombre', icon: <Moon className="h-4 w-4" /> },
   ];
+
+  const fetchJiraTickets = React.useCallback(async () => {
+    if (!user?.jira) return;
+    setJiraLoading(true);
+    setJiraError(null);
+    try {
+      const res = await fetch('/api/jira/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accessToken: user.jira.accessToken,
+          cloudId: user.jira.cloudId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur Jira');
+      setJiraTickets(data.tickets);
+    } catch (err: any) {
+      setJiraError(err.message || 'Impossible de récupérer les tickets');
+    } finally {
+      setJiraLoading(false);
+    }
+  }, [user?.jira]);
+
+  // Auto-fetch tickets when Jira is connected
+  React.useEffect(() => {
+    if (user?.jira) fetchJiraTickets();
+  }, [user?.jira?.accountId, fetchJiraTickets]);
 
   const handleEnableNotifications = async () => {
     if (!('Notification' in window)) {
@@ -207,6 +260,141 @@ export default function SettingsPage() {
                     {time}
                   </Badge>
                 ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Jira */}
+        <Card variant="bordered">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M11.75 2L2 11.75l4.5 4.5L11.75 11l5.25 5.25L21.5 11.75 11.75 2z" fill="#2684FF"/>
+                <path d="M11.75 22l9.75-9.75-4.5-4.5L11.75 13l-5.25-5.25L2 12.25 11.75 22z" fill="#2684FF" opacity=".6"/>
+              </svg>
+              Connexion Jira
+            </CardTitle>
+            <CardDescription>
+              Connectez votre compte Jira pour retrouver vos tickets assignés
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!user?.jira ? (
+              /* Not connected */
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="inline-flex h-2 w-2 rounded-full bg-muted" />
+                  <span className="text-sm text-muted">Non connecté</span>
+                </div>
+                <Button
+                  onClick={() => { window.location.href = '/api/auth/jira'; }}
+                  className="gap-2"
+                >
+                  <Link2 className="h-4 w-4" />
+                  Connecter mon compte Jira
+                </Button>
+              </div>
+            ) : (
+              /* Connected */
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    <div>
+                      <p className="font-medium text-sm">{user.jira.displayName}</p>
+                      <p className="text-xs text-muted">{user.jira.email}</p>
+                      <p className="text-xs text-muted">{user.jira.cloudUrl}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchJiraTickets}
+                      disabled={jiraLoading}
+                      className="gap-1"
+                    >
+                      <RefreshCw className={`h-3 w-3 ${jiraLoading ? 'animate-spin' : ''}`} />
+                      Synchroniser
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { disconnectJira(); setJiraTickets([]); }}
+                      className="gap-1 text-error hover:text-error"
+                    >
+                      <Link2Off className="h-3 w-3" />
+                      Déconnecter
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Error */}
+                {jiraError && (
+                  <div className="flex items-center gap-2 p-3 rounded-lg bg-error/10 text-error text-sm">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    {jiraError}
+                  </div>
+                )}
+
+                {/* Ticket list */}
+                {jiraLoading && jiraTickets.length === 0 ? (
+                  <div className="space-y-2">
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="h-14 rounded-lg bg-muted/30 animate-pulse" />
+                    ))}
+                  </div>
+                ) : jiraTickets.length > 0 ? (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted uppercase tracking-wide">
+                      {jiraTickets.length} ticket{jiraTickets.length > 1 ? 's' : ''} assigné{jiraTickets.length > 1 ? 's' : ''}
+                    </p>
+                    <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+                      {jiraTickets.map((ticket) => (
+                        <div
+                          key={ticket.key}
+                          className="flex items-start gap-3 p-3 rounded-lg border border-border hover:bg-muted/30 transition-colors"
+                        >
+                          <span className="font-mono text-xs font-semibold text-accent shrink-0 mt-0.5 bg-accent/10 px-1.5 py-0.5 rounded">
+                            {ticket.key}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{ticket.summary}</p>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <span className="text-xs text-muted">{ticket.project}</span>
+                              <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${
+                                ticket.status === 'Done' || ticket.status === 'Terminé'
+                                  ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                                  : ticket.status === 'In Progress' || ticket.status === 'En cours'
+                                  ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+                                  : 'bg-muted/50 text-muted'
+                              }`}>
+                                {ticket.status}
+                              </span>
+                              {ticket.sprint && (
+                                <span className="text-xs text-muted">{ticket.sprint}</span>
+                              )}
+                            </div>
+                          </div>
+                          <a
+                            href={`${user.jira!.cloudUrl}/browse/${ticket.key}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="shrink-0 text-muted hover:text-foreground transition-colors"
+                            aria-label={`Ouvrir ${ticket.key} dans Jira`}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : !jiraLoading && (
+                  <p className="text-sm text-muted text-center py-4">
+                    Aucun ticket assigné pour le moment.
+                  </p>
+                )}
               </div>
             )}
           </CardContent>
