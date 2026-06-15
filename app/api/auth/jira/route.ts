@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   const clientId = process.env.JIRA_CLIENT_ID;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const appUrl = req.nextUrl.origin; // always correct, no env var needed
 
   if (!clientId) {
     return NextResponse.json(

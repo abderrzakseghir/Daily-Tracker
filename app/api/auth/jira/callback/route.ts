@@ -4,7 +4,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = req.nextUrl;
   const code = searchParams.get('code');
   const state = searchParams.get('state');
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  const appUrl = req.nextUrl.origin; // always correct, no env var needed
 
   // Validate state to prevent CSRF
   const storedState = req.cookies.get('jira_oauth_state')?.value;
