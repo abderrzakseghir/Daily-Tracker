@@ -7,14 +7,15 @@ import { NextRequest, NextResponse } from 'next/server';
  */
 export async function POST(req: NextRequest) {
   try {
-    const { accessToken, cloudId } = await req.json();
+    const { accessToken, cloudId, accountId, cloudUrl } = await req.json();
 
-    if (!accessToken || !cloudId) {
-      return NextResponse.json({ error: 'Missing accessToken or cloudId' }, { status: 400 });
+    if (!accessToken || !cloudId || !accountId) {
+      return NextResponse.json({ error: 'Missing accessToken, cloudId or accountId' }, { status: 400 });
     }
 
+    // Use accountId directly — currentUser() doesn't work with OAuth 2.0 (3LO)
     const jql = encodeURIComponent(
-      'assignee = currentUser() ORDER BY updated DESC'
+      `assignee = "${accountId}" ORDER BY updated DESC`
     );
     const fields = 'summary,status,priority,project,customfield_10020,updated';
 
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
 
     const data = await res.json();
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const jiraBase = cloudUrl || 'https://afludia.atlassian.net';
 
     const tickets = (data.issues ?? []).map((issue: any) => ({
       key: issue.key,
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
       projectKey: issue.fields.project?.key ?? '',
       sprint: issue.fields.customfield_10020?.[0]?.name,
       updatedAt: issue.fields.updated,
-      url: `https://your-domain.atlassian.net/browse/${issue.key}`,
+      url: `${jiraBase}/browse/${issue.key}`,
     }));
 
     return NextResponse.json({ tickets });

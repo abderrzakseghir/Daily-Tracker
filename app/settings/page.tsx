@@ -80,6 +80,8 @@ export default function SettingsPage() {
         body: JSON.stringify({
           accessToken: user.jira.accessToken,
           cloudId: user.jira.cloudId,
+          accountId: user.jira.accountId,
+          cloudUrl: user.jira.cloudUrl,
         }),
       });
       const data = await res.json();
