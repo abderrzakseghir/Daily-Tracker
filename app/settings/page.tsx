@@ -31,7 +31,7 @@ import { useTheme } from 'next-themes';
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { isAuthenticated, user, entries, updateUserSettings, logout } = useStore();
+  const { isAuthenticated, user, entries, updateUserSettings, logout, _hasHydrated } = useStore();
   const { theme, setTheme } = useTheme();
   const [mounted, setMounted] = React.useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(
@@ -58,10 +58,10 @@ export default function SettingsPage() {
   }, []);
 
   React.useEffect(() => {
-    if (!isAuthenticated) {
+    if (_hasHydrated && !isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, router]);
 
   const themeOptions: SelectOption[] = [
     { value: 'system', label: 'Système', icon: <Monitor className="h-4 w-4" /> },

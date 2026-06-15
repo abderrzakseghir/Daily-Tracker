@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const {
     user,
     isAuthenticated,
+    _hasHydrated,
     currentEntry,
     entries,
     logout,
@@ -33,13 +34,15 @@ export default function DashboardPage() {
   const [editingTask, setEditingTask] = React.useState<Task | null>(null);
 
   React.useEffect(() => {
+    if (!_hasHydrated) return;
     if (!isAuthenticated) {
       router.push('/');
       return;
     }
     loadEntries();
-  }, [isAuthenticated, router, loadEntries]);
+  }, [_hasHydrated, isAuthenticated, router, loadEntries]);
 
+  if (!_hasHydrated) return null;
   if (!isAuthenticated || !user || !currentEntry) {
     return null;
   }

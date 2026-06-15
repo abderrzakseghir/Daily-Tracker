@@ -9,15 +9,15 @@ import { format, subDays } from 'date-fns';
 
 export default function DailyMeetingPage() {
   const router = useRouter();
-  const { isAuthenticated, entries, logout } = useStore();
+  const { isAuthenticated, _hasHydrated, entries, logout } = useStore();
 
   React.useEffect(() => {
-    if (!isAuthenticated) {
+    if (_hasHydrated && !isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, router]);
 
-  if (!isAuthenticated) {
+  if (!_hasHydrated || !isAuthenticated) {
     return null;
   }
 

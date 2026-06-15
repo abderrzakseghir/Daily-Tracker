@@ -24,7 +24,7 @@ import { format, startOfWeek, endOfWeek, startOfMonth, endOfMonth, subDays, isWi
 
 export default function ReportsPage() {
   const router = useRouter();
-  const { isAuthenticated, entries, user, logout } = useStore();
+  const { isAuthenticated, entries, user, logout, _hasHydrated } = useStore();
   const [reportType, setReportType] = React.useState<ReportPeriod>('weekly');
   const [customStart, setCustomStart] = React.useState('');
   const [customEnd, setCustomEnd] = React.useState('');
@@ -32,10 +32,10 @@ export default function ReportsPage() {
   const [reportTitle, setReportTitle] = React.useState('');
 
   React.useEffect(() => {
-    if (!isAuthenticated) {
+    if (_hasHydrated && !isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, router]);
 
   const reportOptions: SelectOption[] = [
     { value: 'daily', label: 'Rapport journalier' },
@@ -154,7 +154,7 @@ export default function ReportsPage() {
     setIsGenerating(false);
   };
 
-  if (!isAuthenticated) {
+  if (!_hasHydrated || !isAuthenticated) {
     return null;
   }
 

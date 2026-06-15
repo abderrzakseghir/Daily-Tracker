@@ -30,7 +30,8 @@ import {
 export default function HistoryPage() {
   const router = useRouter();
   const { 
-    isAuthenticated, 
+    isAuthenticated,
+    _hasHydrated,
     entries, 
     currentEntry,
     logout,
@@ -54,10 +55,10 @@ export default function HistoryPage() {
   const [showUnlockModal, setShowUnlockModal] = React.useState(false);
 
   React.useEffect(() => {
-    if (!isAuthenticated) {
+    if (_hasHydrated && !isAuthenticated) {
       router.push('/');
     }
-  }, [isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, router]);
 
   const selectedDateStr = selectedDate.toISOString().split('T')[0];
   const selectedEntry = entries.find((e) => e.date === selectedDateStr);
@@ -155,7 +156,7 @@ export default function HistoryPage() {
   // Get the entry to display (either selected or current if editing)
   const displayEntry = isEditing && currentEntry ? currentEntry : selectedEntry;
 
-  if (!isAuthenticated) {
+  if (!_hasHydrated || !isAuthenticated) {
     return null;
   }
 

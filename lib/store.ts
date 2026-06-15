@@ -5,6 +5,10 @@ import { generateId } from '@/lib/utils';
 import { calculateStreak, calculateLevel, calculateExperience } from '@/lib/calculations';
 
 interface AppState {
+  // Hydration
+  _hasHydrated: boolean;
+  setHasHydrated: (v: boolean) => void;
+
   // User
   user: User | null;
   isAuthenticated: boolean;
@@ -65,6 +69,9 @@ export const useStore = create<AppState>()(
   persist(
     (set, get) => ({
       // Initial State
+      _hasHydrated: false,
+      setHasHydrated: (v) => set({ _hasHydrated: v }),
+
       user: null,
       isAuthenticated: false,
       entries: [],
@@ -419,6 +426,12 @@ export const useStore = create<AppState>()(
         isAuthenticated: state.isAuthenticated,
         jiraTickets: state.jiraTickets,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) state.setHasHydrated(true);
+      },
+      onRehydrateStorage: () => (state) => {
+        if (state) state.setHasHydrated(true);
+      },
     }
   )
 );

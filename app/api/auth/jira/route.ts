@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const params = new URLSearchParams({
     audience: 'api.atlassian.com',
     client_id: clientId,
-    scope: 'read:jira-user read:jira-work offline_access',
+    scope: 'read:jira-user read:jira-work offline_access read:account',
     redirect_uri: `${appUrl}/api/auth/jira/callback`,
     state,
     response_type: 'code',
