@@ -7,3 +7,5 @@ export { CategoryChart } from './category-chart';
 export { WeeklyChart } from './weekly-chart';
 export { CalendarView } from './calendar-view';
 export { DailyMeetingView } from './daily-meeting-view';
+export { TicketPlanningPanel } from './ticket-planning-panel';
+export { TimeblockingCalendar } from './timeblocking-calendar';

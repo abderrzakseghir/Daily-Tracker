@@ -41,19 +41,30 @@ export default function SettingsPage() {
   const [jiraLoading, setJiraLoading] = React.useState(false);
   const [jiraError, setJiraError] = React.useState<string | null>(null);
 
-  const { connectJira, disconnectJira } = useStore();
+  const { connectJira, disconnectJira, setJiraTickets: storeSetJiraTickets } = useStore();
 
   React.useEffect(() => {
     setMounted(true);
   }, []);
 
-  // Claim Jira connection after OAuth redirect
+  // Handle Jira OAuth redirect result
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const jiraStatus = params.get('jira');
-    if (jiraStatus === 'error') {
+    if (jiraStatus === 'connected') {
       window.history.replaceState({}, '', '/settings');
-      setJiraError('La connexion Jira a échoué. Réessayez.');
+      // Token is already in localStorage (written by the callback bridge page).
+      // Zustand will hydrate on next render — trigger a ticket fetch shortly after.
+      setTimeout(() => {
+        const freshJira = useStore.getState().user?.jira;
+        if (freshJira) {
+          fetchJiraTickets();
+        }
+      }, 500);
+    } else if (jiraStatus === 'error') {
+      const reason = params.get('reason') ?? 'unknown';
+      window.history.replaceState({}, '', '/settings');
+      setJiraError(`La connexion Jira a échoué (${reason}). Réessayez.`);
     }
   }, []);
 
@@ -89,6 +100,7 @@ export default function SettingsPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur Jira');
       setJiraTickets(data.tickets);
+      storeSetJiraTickets(data.tickets); // persist to Zustand store for TaskForm
     } catch (err: any) {
       setJiraError(err.message || 'Impossible de récupérer les tickets');
     } finally {
@@ -319,7 +331,7 @@ export default function SettingsPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => { disconnectJira(); setJiraTickets([]); }}
+                      onClick={() => { disconnectJira(); setJiraTickets([]); storeSetJiraTickets([]); }}
                       className="gap-1 text-error hover:text-error"
                     >
                       <Link2Off className="h-3 w-3" />

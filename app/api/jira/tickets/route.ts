@@ -13,23 +13,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing accessToken or cloudId' }, { status: 400 });
     }
 
-    // Use currentUser() - works with OAuth 2.0 when read:jira-work scope is granted
-    // Fallback: assignee by accountId if provided
-    const jqlBase = accountId
-      ? `assignee = "${accountId}" OR assignee = currentUser()`
-      : `assignee = currentUser()`;
-    const jql = encodeURIComponent(`(${jqlBase}) ORDER BY updated DESC`);
-    const fields = 'summary,status,priority,project,customfield_10020,updated';
+    // Debug: log the cloudId we received to verify it's a Jira cloud ID
+    console.log('[Jira tickets] Received cloudId:', cloudId, '| accountId:', accountId ?? '(none)');
 
-    const res = await fetch(
-      `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/search?jql=${jql}&maxResults=100&fields=${fields}`,
-      {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          Accept: 'application/json',
-        },
-      }
-    );
+    // Migrated from deprecated GET /rest/api/3/search to POST /rest/api/3/search/jql
+    // See: https://developer.atlassian.com/changelog/#CHANGE-2046
+    const jiraUrl = `https://api.atlassian.com/ex/jira/${cloudId}/rest/api/3/search/jql`;
+    console.log('[Jira tickets] POST', jiraUrl);
+
+    const res = await fetch(jiraUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        jql: 'assignee = currentUser() ORDER BY updated DESC',
+        maxResults: 100,
+        fields: ['summary', 'status', 'priority', 'project', 'customfield_10020', 'updated'],
+      }),
+    });
 
     if (res.status === 401) {
       return NextResponse.json({ error: 'token_expired' }, { status: 401 });

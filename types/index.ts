@@ -199,6 +199,31 @@ export interface Badge {
   earnedAt: string;
 }
 
+// -------------------------
+// TIMEBLOCKING (JIRA PLANNING)
+// -------------------------
+
+export interface PlannedJiraTicket extends JiraTicket {
+  /** User-defined importance score 1–10 (default: 5). */
+  importance: number;
+  /** Manually typed duration in minutes (null = auto-computed from importance). */
+  durationMinutes: number | null;
+  /** Day assigned to: "YYYY-MM-DD" or null (unscheduled). */
+  scheduledDate: string | null;
+  /** Start time assigned by autoScheduleTickets: "HH:MM" or null. */
+  scheduledStartTime: string | null;
+  /** Effective duration after auto-gen + proportional compression (always set). */
+  computedDurationMinutes: number;
+}
+
+export interface FrozenDaySchedule {
+  /** "YYYY-MM-DD" */
+  date: string;
+  /** Immutable snapshot of the schedule frozen by "Valider la journée". */
+  tickets: PlannedJiraTicket[];
+  frozenAt: string;
+}
+
 export interface BadgeDefinition {
   type: BadgeType;
   name: string;

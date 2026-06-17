@@ -16,6 +16,7 @@ import {
   Sun,
   Moon,
   LogOut,
+  CalendarDays,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 
@@ -34,6 +35,7 @@ export function Navigation({ onLogout }: NavigationProps) {
   const navItems = [
     { href: '/dashboard', label: "Aujourd'hui", icon: Home },
     { href: '/history', label: 'Historique', icon: Calendar },
+    { href: '/timeblocking', label: 'Planning', icon: CalendarDays },
     { href: '/reports', label: 'Rapports', icon: FileText },
     { href: '/daily-meeting', label: 'Daily', icon: Presentation },
     { href: '/settings', label: 'Paramètres', icon: Settings },

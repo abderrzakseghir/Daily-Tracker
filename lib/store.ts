@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { DailyEntry, User, Task, PlannedTask, UserGamification, Badge, BadgeType, JiraConnection, JiraTicket } from '@/types';
+import { DailyEntry, User, Task, PlannedTask, UserGamification, Badge, BadgeType, JiraConnection, JiraTicket, PlannedJiraTicket, FrozenDaySchedule } from '@/types';
 import { generateId } from '@/lib/utils';
 import { calculateStreak, calculateLevel, calculateExperience } from '@/lib/calculations';
 
@@ -54,6 +54,15 @@ interface AppState {
   disconnectJira: () => void;
   setJiraTickets: (tickets: JiraTicket[]) => void;
   jiraTickets: JiraTicket[];
+
+  // Timeblocking
+  plannedTickets: PlannedJiraTicket[];
+  frozenSchedules: FrozenDaySchedule[];
+  /** Merges raw Jira tickets into plannedTickets, preserving existing enriched fields. */
+  initPlannedTickets: (raw: JiraTicket[]) => void;
+  updatePlannedTicket: (key: string, updates: Partial<PlannedJiraTicket>) => void;
+  /** Freezes a day's current schedule snapshot (local only, no Jira write). */
+  freezeDaySchedule: (date: string, tickets: PlannedJiraTicket[]) => void;
 
   // Utilities
   setError: (error: string | null) => void;
@@ -399,6 +408,45 @@ export const useStore = create<AppState>()(
       // Jira Actions
       jiraTickets: [],
 
+      // Timeblocking Actions
+      plannedTickets: [],
+      frozenSchedules: [],
+
+      initPlannedTickets: (raw) => {
+        const { plannedTickets } = get();
+        const existingKeys = new Set(plannedTickets.map((t) => t.key));
+        const newTickets: PlannedJiraTicket[] = raw
+          .filter((t) => !existingKeys.has(t.key))
+          .map((t) => ({
+            ...t,
+            importance: 5,
+            durationMinutes: null,
+            scheduledDate: null,
+            scheduledStartTime: null,
+            computedDurationMinutes: 60,
+          }));
+        set({ plannedTickets: [...plannedTickets, ...newTickets] });
+      },
+
+      updatePlannedTicket: (key, updates) => {
+        const { plannedTickets } = get();
+        set({
+          plannedTickets: plannedTickets.map((t) =>
+            t.key === key ? { ...t, ...updates } : t,
+          ),
+        });
+      },
+
+      freezeDaySchedule: (date, tickets) => {
+        const { frozenSchedules } = get();
+        set({
+          frozenSchedules: [
+            ...frozenSchedules.filter((s) => s.date !== date),
+            { date, tickets, frozenAt: new Date().toISOString() },
+          ],
+        });
+      },
+
       connectJira: (connection) => {
         const { user } = get();
         if (!user) return;
@@ -425,10 +473,9 @@ export const useStore = create<AppState>()(
         entries: state.entries,
         isAuthenticated: state.isAuthenticated,
         jiraTickets: state.jiraTickets,
+        plannedTickets: state.plannedTickets,
+        frozenSchedules: state.frozenSchedules,
       }),
-      onRehydrateStorage: () => (state) => {
-        if (state) state.setHasHydrated(true);
-      },
       onRehydrateStorage: () => (state) => {
         if (state) state.setHasHydrated(true);
       },

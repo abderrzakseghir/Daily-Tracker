@@ -20,6 +20,7 @@ export default function DashboardPage() {
     _hasHydrated,
     currentEntry,
     entries,
+    jiraTickets,
     logout,
     loadEntries,
     addTask,
@@ -149,7 +150,7 @@ export default function DashboardPage() {
                         onCancel={() => setEditingTask(null)}
                       />
                     ) : (
-                      <TaskForm onSubmit={addTask} />
+                      <TaskForm onSubmit={addTask} jiraTickets={jiraTickets} />
                     )}
                   </div>
                 )}
