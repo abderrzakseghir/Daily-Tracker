@@ -41,7 +41,7 @@ export const CATEGORY_COLORS: Record<Category, string> = {
   other: '#6B7280', // gray
 };
 
-export const DURATIONS = ['15min', '30min', '1h', '2h', '4h', 'custom'] as const;
+export const DURATIONS = ['15min', '30min', '1h', '2h', '3h', '4h', 'custom'] as const;
 
 export type Duration = (typeof DURATIONS)[number];
 
@@ -50,6 +50,7 @@ export const DURATION_LABELS: Record<Duration, string> = {
   '30min': '30 min',
   '1h': '1 heure',
   '2h': '2 heures',
+  '3h': '3 heures',
   '4h': '4 heures',
   custom: 'Personnalisé',
 };
@@ -59,6 +60,7 @@ export const DURATION_MINUTES: Record<Duration, number> = {
   '30min': 30,
   '1h': 60,
   '2h': 120,
+  '3h': 180,
   '4h': 240,
   custom: 0,
 };
@@ -83,6 +85,8 @@ export interface PlannedTask {
   description: string;
   category: Category;
   estimatedDuration?: Duration;
+  /** Minutes value when estimatedDuration is 'custom'. */
+  estimatedCustomDuration?: number;
   createdAt: string;
 }
 

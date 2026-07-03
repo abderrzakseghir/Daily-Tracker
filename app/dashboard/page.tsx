@@ -193,6 +193,7 @@ export default function DashboardPage() {
                   onAdd={addPlannedTask}
                   onRemove={removePlannedTask}
                   readonly={currentEntry.validated}
+                  jiraTickets={jiraTickets}
                 />
               </CardContent>
             </Card>

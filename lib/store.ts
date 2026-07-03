@@ -332,7 +332,7 @@ export const useStore = create<AppState>()(
           entry.tasks.forEach((task) => {
             const mins = task.duration === 'custom'
               ? (task.customDuration || 0)
-              : { '15min': 15, '30min': 30, '1h': 60, '2h': 120, '4h': 240, custom: 0 }[task.duration];
+              : ({ '15min': 15, '30min': 30, '1h': 60, '2h': 120, '3h': 180, '4h': 240, custom: 0 } as Record<string, number>)[task.duration] ?? 0;
             totalMinutes += mins;
           });
         });

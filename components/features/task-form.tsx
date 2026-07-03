@@ -1,10 +1,11 @@
 'use client';
 
 import * as React from 'react';
-import { Category, Duration, CATEGORIES, CATEGORY_LABELS, DURATIONS, DURATION_LABELS, Task, JiraTicket } from '@/types';
+import { Category, Duration, CATEGORIES, CATEGORY_LABELS, Task, JiraTicket } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectOption } from '@/components/ui/select';
+import { DurationPicker } from './duration-picker';
 import { generateId } from '@/lib/utils';
 import { Plus, Save } from 'lucide-react';
 
@@ -32,8 +33,8 @@ export function TaskForm({
   const [duration, setDuration] = React.useState<Duration>(
     initialTask?.duration || '1h'
   );
-  const [customDuration, setCustomDuration] = React.useState(
-    initialTask?.customDuration?.toString() || ''
+  const [customDuration, setCustomDuration] = React.useState<number | undefined>(
+    initialTask?.customDuration ?? undefined
   );
   const [showDropdown, setShowDropdown] = React.useState(false);
   const wrapperRef = React.useRef<HTMLDivElement>(null);
@@ -74,11 +75,6 @@ export function TaskForm({
     label: CATEGORY_LABELS[cat],
   }));
 
-  const durationOptions: SelectOption[] = DURATIONS.map((dur) => ({
-    value: dur,
-    label: DURATION_LABELS[dur],
-  }));
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!description.trim()) return;
@@ -87,7 +83,7 @@ export function TaskForm({
       description: description.trim(),
       category,
       duration,
-      customDuration: duration === 'custom' ? parseInt(customDuration) || 0 : undefined,
+      customDuration: duration === 'custom' ? customDuration : undefined,
       completed: initialTask?.completed || false,
     });
 
@@ -96,7 +92,7 @@ export function TaskForm({
       setDescription('');
       setCategory('development');
       setDuration('1h');
-      setCustomDuration('');
+      setCustomDuration(undefined);
     }
   };
 
@@ -184,24 +180,15 @@ export function TaskForm({
           />
         </div>
         <div className="flex-1">
-          <Select
-            options={durationOptions}
+          <DurationPicker
             value={duration}
-            onChange={(v) => setDuration(v as Duration)}
-            placeholder="Durée"
+            customMinutes={customDuration}
+            onChange={(dur, mins) => {
+              setDuration(dur);
+              setCustomDuration(mins);
+            }}
           />
         </div>
-        {duration === 'custom' && (
-          <div className="w-24">
-            <Input
-              type="number"
-              placeholder="Min"
-              value={customDuration}
-              onChange={(e) => setCustomDuration(e.target.value)}
-              min={1}
-            />
-          </div>
-        )}
       </div>
 
       <div className="flex items-center justify-end gap-2">

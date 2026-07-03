@@ -21,7 +21,7 @@ export const CALENDAR_END_HOUR = 19;
 export const DISPLAY_HOURS = CALENDAR_END_HOUR - CALENDAR_START_HOUR; // 10
 
 /** Pixel height per hour in the calendar grid. */
-export const HOUR_PX = 64;
+export const HOUR_PX = 80;
 
 // ─── Duration helpers ─────────────────────────────────────────
 
@@ -71,6 +71,115 @@ export function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
   return m === 0 ? `${h}h` : `${h}h${m.toString().padStart(2, '0')}`;
+}
+
+// ─── Pure time allocation ─────────────────────────────────────
+
+/**
+ * computeTimeAllocation — pure function that distributes `workDayMinutes`
+ * among tickets proportionally to their importance score (1–10).
+ *
+ * Rules:
+ *  - If a ticket has `durationMinutes` set, it is treated as a manual override
+ *    and excluded from the proportional pool.
+ *  - The remaining time is split among "auto" tickets ∝ their importance.
+ *  - When all importances are 0 the time is split equally (safe fallback).
+ *  - Results are rounded to the nearest 5 min; the **last auto ticket** absorbs
+ *    any rounding delta so that Σ(minutes) == workDayMinutes exactly.
+ *  - If manual overrides alone fill (or exceed) the day, auto tickets receive 0.
+ *
+ * @example
+ *   computeTimeAllocation([{id:'A',importance:5},{id:'B',importance:4},{id:'C',importance:1}])
+ *   // → [{id:'A',minutes:240},{id:'B',minutes:192},{id:'C',minutes:48}]
+ */
+export function computeTimeAllocation(
+  tickets: { id: string; importance: number; durationMinutes?: number | null }[],
+  workDayMinutes = DAY_CAPACITY_MINUTES,
+): { id: string; minutes: number }[] {
+  if (tickets.length === 0) return [];
+
+  // ── Separate manual vs auto ──────────────────────────────────
+  const manualTotal = tickets
+    .filter((t) => t.durationMinutes != null)
+    .reduce((s, t) => s + t.durationMinutes!, 0);
+
+  const remaining = Math.max(0, workDayMinutes - manualTotal);
+  const autoTickets = tickets.filter((t) => t.durationMinutes == null);
+
+  if (autoTickets.length === 0) {
+    return tickets.map((t) => ({ id: t.id, minutes: t.durationMinutes! }));
+  }
+
+  if (remaining === 0) {
+    return tickets.map((t) => ({ id: t.id, minutes: t.durationMinutes ?? 0 }));
+  }
+
+  // ── Proportional allocation ──────────────────────────────────
+  const totalImportance = autoTickets.reduce((s, t) => s + t.importance, 0);
+
+  const rawAllocations = autoTickets.map((t) => ({
+    id: t.id,
+    raw:
+      totalImportance > 0
+        ? remaining * (t.importance / totalImportance)
+        : remaining / autoTickets.length,
+  }));
+
+  // ── Round to nearest 5 min ───────────────────────────────────
+  const rounded = rawAllocations.map((a) => ({
+    id: a.id,
+    minutes: Math.max(5, Math.round(a.raw / 5) * 5),
+  }));
+
+  // ── Correct last auto ticket so Σ == remaining exactly ───────
+  const roundedSum = rounded.reduce((s, r) => s + r.minutes, 0);
+  rounded[rounded.length - 1].minutes += remaining - roundedSum;
+  if (rounded[rounded.length - 1].minutes < 5) {
+    rounded[rounded.length - 1].minutes = 5;
+  }
+
+  // ── Merge back in original order ────────────────────────────
+  const autoMap = new Map(rounded.map((r) => [r.id, r.minutes]));
+  return tickets.map((t) => ({
+    id: t.id,
+    minutes: t.durationMinutes != null ? t.durationMinutes : (autoMap.get(t.id) ?? 0),
+  }));
+}
+
+// ─── Timezone-safe date helper ────────────────────────────────
+
+/**
+ * Converts a YYYY-MM-DD string to a Jira-compatible ISO 8601 started string
+ * at 09:00 in the **local timezone of the calling environment**.
+ *
+ * ⚠️  Call this on the CLIENT SIDE (browser) so the timezone matches the
+ *     user's actual timezone — never inside a Next.js API route.
+ *
+ * Why not `new Date('2026-06-15').toISOString()`?
+ *   → `new Date('2026-06-15')` is parsed as UTC midnight.
+ *     For a user at UTC-5, that becomes June 14 at 19:00 local = wrong day.
+ *
+ * This function uses `new Date('...T09:00:00')` (no Z/offset suffix) which the
+ * JS spec parses as LOCAL time, then formats the full offset explicitly.
+ *
+ * @example (UTC+2 browser)
+ *   toJiraStarted('2026-06-15')         // → '2026-06-15T09:00:00.000+0200'
+ *   toJiraStarted('2026-06-15', '15:24') // → '2026-06-15T15:24:00.000+0200'
+ */
+export function toJiraStarted(dateStr: string, timeStr = '09:00'): string {
+  // Normalise "HH:MM" → "HH:MM:SS" so the Date constructor gets a full time.
+  const time = timeStr.length === 5 ? `${timeStr}:00` : timeStr;
+  // Intentionally NO timezone suffix → local time interpretation
+  const d = new Date(`${dateStr}T${time}`);
+  const p = (n: number, w = 2) => String(n).padStart(w, '0');
+  const offsetMin = -d.getTimezoneOffset(); // getTimezoneOffset() is negated vs ISO
+  const sign = offsetMin >= 0 ? '+' : '-';
+  const absMin = Math.abs(offsetMin);
+  return (
+    `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}` +
+    `T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.000` +
+    `${sign}${p(Math.floor(absMin / 60))}${p(absMin % 60)}`
+  );
 }
 
 // ─── Core algorithm ───────────────────────────────────────────
@@ -129,11 +238,11 @@ export function autoScheduleTickets(
   // floor() guarantees sumFloored ≤ tempsRestant (no artificial minimum here).
   const flooredByKey = new Map<string, number>();
   let sumFloored = 0;
-  for (const [key, raw] of rawByKey) {
+  rawByKey.forEach((raw, key) => {
     const f = Math.floor(raw);
     flooredByKey.set(key, f);
     sumFloored += f;
-  }
+  });
 
   // Distribute the leftover minutes to tickets with the highest fractional part.
   let remainderMinutes = tempsRestant - sumFloored; // always >= 0

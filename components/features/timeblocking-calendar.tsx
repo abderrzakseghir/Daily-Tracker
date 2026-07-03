@@ -45,34 +45,70 @@ function TicketBlock({
   const color = getTicketColor(ticket.projectKey || ticket.key);
   const top = ticket.scheduledStartTime ? timeToTopPx(ticket.scheduledStartTime) : 0;
   const height = durationToHeightPx(ticket.computedDurationMinutes);
-  const isCompact = height < 36;
+  const isCompact = height < 40;
+  const isTiny = height < 24;
+
+  // Compute end time string
+  const endTime = React.useMemo(() => {
+    if (!ticket.scheduledStartTime) return null;
+    const [h, m] = ticket.scheduledStartTime.split(':').map(Number);
+    const endMin = h * 60 + m + ticket.computedDurationMinutes;
+    return minutesToTimeString(endMin);
+  }, [ticket.scheduledStartTime, ticket.computedDurationMinutes]);
 
   return (
     <div
-      title={`${ticket.key} · ${ticket.summary}\n${formatDuration(ticket.computedDurationMinutes)}${ticket.scheduledStartTime ? ` · ${ticket.scheduledStartTime}` : ''}`}
+      title={`${ticket.key} · ${ticket.summary}\n${formatDuration(ticket.computedDurationMinutes)}${ticket.scheduledStartTime ? ` · ${ticket.scheduledStartTime}–${endTime}` : ''}`}
       className={cn(
-        'absolute rounded-md overflow-hidden transition-opacity',
-        color.bg,
-        isFrozen ? 'opacity-80' : 'opacity-100',
+        'absolute rounded-lg overflow-hidden shadow-sm transition-opacity flex',
+        'bg-card border border-border/50',
+        isFrozen ? 'opacity-75' : 'opacity-100 hover:opacity-90',
       )}
       style={{
-        top: `${top}px`,
-        height: `${height}px`,
-        left: `calc(2px + ${leftFraction * 100}%)`,
-        width: `calc(${widthFraction * 100}% - 4px)`,
+        top: `${top + 2}px`,
+        height: `${height - 4}px`,
+        left: `calc(6px + ${leftFraction * 100}%)`,
+        width: `calc(${widthFraction * 100}% - 12px)`,
       }}
     >
-      <div className="h-full flex flex-col justify-start px-1.5 py-1 text-white">
-        <div className={cn('font-semibold truncate', isCompact ? 'text-[10px]' : 'text-xs')}>
-          {ticket.key}
-        </div>
-        {!isCompact && (
-          <div className="text-[10px] opacity-90 truncate leading-tight">{ticket.summary}</div>
-        )}
-        {height >= 50 && (
-          <div className="text-[10px] opacity-75 mt-auto">
-            {formatDuration(ticket.computedDurationMinutes)}
+      {/* Left accent bar (Tempo-style) */}
+      <div className={cn('w-1 shrink-0 rounded-l-lg', color.bg)} />
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 flex flex-col justify-start px-2 py-1.5 overflow-hidden">
+        {/* Ticket ID badge */}
+        {!isTiny && (
+          <div className="flex items-center justify-between gap-1 mb-0.5">
+            <span
+              className={cn(
+                'font-bold font-mono shrink-0 rounded px-1 py-0.5 leading-none',
+                color.light,
+                color.text,
+                isCompact ? 'text-[9px]' : 'text-[11px]',
+              )}
+            >
+              {ticket.key}
+            </span>
+            {!isCompact && (
+              <span className="text-[10px] text-muted shrink-0">
+                {ticket.scheduledStartTime}–{endTime}
+              </span>
+            )}
           </div>
+        )}
+
+        {/* Summary */}
+        {!isCompact && (
+          <p className="text-xs font-medium leading-tight line-clamp-2 text-foreground">
+            {ticket.summary}
+          </p>
+        )}
+
+        {/* Duration chip */}
+        {height >= 56 && (
+          <span className="mt-auto text-[10px] text-muted font-medium">
+            {formatDuration(ticket.computedDurationMinutes)}
+          </span>
         )}
       </div>
     </div>
@@ -336,8 +372,8 @@ export function TimeblockingCalendar({
         <div
           className="grid"
           style={{
-            gridTemplateColumns: '3.5rem repeat(7, minmax(0, 1fr))',
-            minWidth: '600px',
+            gridTemplateColumns: '3.5rem repeat(7, minmax(140px, 1fr))',
+            minWidth: '1040px',
           }}
         >
           {/* ── Header row ── */}
@@ -354,10 +390,10 @@ export function TimeblockingCalendar({
                   isToday && 'bg-accent/5',
                 )}
               >
-                <div className="flex flex-col items-center py-2 gap-1">
+                <div className="flex flex-col items-center py-3 gap-1.5">
                   <span
                     className={cn(
-                      'text-[10px] font-medium uppercase tracking-wide',
+                      'text-xs font-semibold uppercase tracking-wide',
                       isToday ? 'text-accent' : 'text-muted',
                     )}
                   >
@@ -365,12 +401,27 @@ export function TimeblockingCalendar({
                   </span>
                   <span
                     className={cn(
-                      'text-sm font-semibold w-7 h-7 flex items-center justify-center rounded-full',
+                      'text-lg font-bold w-9 h-9 flex items-center justify-center rounded-full',
                       isToday ? 'bg-accent text-white' : 'text-foreground',
                     )}
                   >
                     {num}
                   </span>
+                  {/* Day total duration */}
+                  {(() => {
+                    const dayTickets = frozen
+                      ? frozen.tickets
+                      : plannedTickets.filter((t) => t.scheduledDate === date);
+                    const totalMin = dayTickets.reduce(
+                      (s, t) => s + (t.computedDurationMinutes || 0),
+                      0,
+                    );
+                    return totalMin > 0 ? (
+                      <span className="text-[11px] font-medium text-muted bg-muted/10 rounded px-1.5 py-0.5">
+                        {formatDuration(totalMin)}
+                      </span>
+                    ) : null;
+                  })()}
                   {frozen ? (
                     <div className="flex flex-col items-center gap-0.5">
                       <span className="flex items-center gap-0.5 text-[10px] font-medium text-success">

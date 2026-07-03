@@ -6,7 +6,7 @@ import { AppLayout } from '@/components/layout';
 import { TicketPlanningPanel } from '@/components/features/ticket-planning-panel';
 import { TimeblockingCalendar } from '@/components/features/timeblocking-calendar';
 import { useStore } from '@/lib/store';
-import { getWeekDays, autoScheduleTickets } from '@/lib/timeblocking';
+import { getWeekDays, autoScheduleTickets, toJiraStarted } from '@/lib/timeblocking';
 import type { PlannedJiraTicket } from '@/types';
 
 export default function TimeblockingPage() {
@@ -50,10 +50,24 @@ export default function TimeblockingPage() {
       alert('Connectez votre compte Jira dans les paramètres pour synchroniser.');
       return;
     }
-    const payload = tickets.map((t) => ({
-      key: t.key,
-      durationMinutes: t.computedDurationMinutes,
-    }));
+
+    // ── BUG FIX: each ticket must carry its own `started` based on its
+    //    scheduledStartTime, NOT a single shared "09:00" for the whole day.
+    //    Without this, every worklog lands at 09:00 in Jira and they all
+    //    overlap — only the first one is visible in Tempo.
+    const payload = tickets.map((t) => {
+      const startTime = t.scheduledStartTime ?? '09:00';
+      const started = toJiraStarted(date, startTime);
+      console.log(
+        `[Jira sync] ${t.key} → started=${started} | ${t.computedDurationMinutes} min (${startTime})`,
+      );
+      return {
+        key: t.key,
+        durationMinutes: t.computedDurationMinutes,
+        started,
+      };
+    });
+
     const res = await fetch('/api/jira/worklog', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -63,12 +77,28 @@ export default function TimeblockingPage() {
         tickets: payload,
       }),
     });
-    if (!res.ok) {
-      const json = await res.json().catch(() => ({}));
+
+    const json = await res.json().catch(() => ({})) as {
+      synced?: number;
+      failed?: number;
+      details?: { key: string; reason: string }[];
+      error?: string;
+    };
+
+    // 207 = partial failure (some tickets sent, some failed) — still need to warn.
+    if (res.status === 207) {
+      const detail = json.details?.map((d) => `• ${d.key}: ${d.reason}`).join('\n') ?? '';
+      console.warn('[Jira sync] Partial failure:', json);
       throw new Error(
-        (json as { error?: string }).error ?? 'Erreur lors de la synchronisation Jira',
+        `${json.failed} ticket(s) n'ont pas pu être envoyés (${json.synced} réussis).\n${detail}`,
       );
     }
+
+    if (!res.ok) {
+      throw new Error(json.error ?? 'Erreur lors de la synchronisation Jira');
+    }
+
+    console.log(`[Jira sync] ✓ ${json.synced} worklog(s) envoyés avec succès.`);
   }
 
   // ── Responsive panel state ───────────────────────────────────

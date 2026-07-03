@@ -1,6 +1,7 @@
 export { TaskCard } from './task-card';
 export { TaskForm } from './task-form';
 export { PlannedTaskList } from './planned-task-list';
+export { DurationPicker } from './duration-picker';
 export { DayValidation } from './day-validation';
 export { GamificationCard } from './gamification-card';
 export { CategoryChart } from './category-chart';
