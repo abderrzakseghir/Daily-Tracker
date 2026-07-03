@@ -70,8 +70,8 @@ export function CategoryChart({
         titleFont: { size: 13 },
         bodyFont: { size: 12 },
         callbacks: {
-          label: (context: { raw: number }) => {
-            const minutes = context.raw;
+          label: (context: { raw: unknown }) => {
+            const minutes = context.raw as number;
             const hours = Math.floor(minutes / 60);
             const mins = minutes % 60;
             return hours > 0 ? `${hours}h ${mins}min` : `${mins} min`;

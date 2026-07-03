@@ -135,7 +135,7 @@ export default function SettingsPage() {
 
   const handleExportData = () => {
     const data = {
-      user: user ? { ...user, pin: undefined } : null,
+      user,
       entries,
       exportedAt: new Date().toISOString(),
     };
@@ -179,13 +179,23 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-2xl bg-accent/10 flex items-center justify-center">
-                <span className="text-2xl font-bold text-accent">
-                  {user.name.charAt(0).toUpperCase()}
-                </span>
+              <div className="h-16 w-16 rounded-2xl bg-accent/10 flex items-center justify-center overflow-hidden">
+                {user.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="h-full w-full object-cover rounded-2xl"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : (
+                  <span className="text-2xl font-bold text-accent">
+                    {user.name.charAt(0).toUpperCase()}
+                  </span>
+                )}
               </div>
               <div>
                 <p className="font-semibold text-lg">{user.name}</p>
+                <p className="text-sm text-muted">{user.email}</p>
                 <p className="text-sm text-muted">
                   Membre depuis {new Date(user.createdAt).toLocaleDateString('fr-FR', {
                     month: 'long',

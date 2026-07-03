@@ -22,9 +22,8 @@ interface AppState {
   error: string | null;
 
   // Actions - Auth
-  login: (pin: string) => Promise<boolean>;
+  loginWithGoogle: (googleUser: { googleId: string; email: string; name: string; avatar?: string }) => void;
   logout: () => void;
-  createUser: (name: string, pin: string) => Promise<void>;
   updateUserSettings: (settings: Partial<User['settings']>) => void;
 
   // Actions - Entries
@@ -89,49 +88,55 @@ export const useStore = create<AppState>()(
       error: null,
 
       // Auth Actions
-      login: async (pin: string) => {
+      loginWithGoogle: (googleUser) => {
         const { user } = get();
-        if (!user) return false;
+        const now = new Date().toISOString();
 
-        // Simple hash comparison (in production, use proper hashing)
-        const hashedInput = hashSimple(pin);
-        if (hashedInput === user.pin) {
-          set({ isAuthenticated: true });
-          return true;
+        if (user && user.googleId === googleUser.googleId) {
+          // Known user — refresh profile and authenticate
+          set({
+            user: {
+              ...user,
+              email: googleUser.email,
+              name: googleUser.name,
+              avatar: googleUser.avatar,
+              updatedAt: now,
+            },
+            isAuthenticated: true,
+          });
+        } else {
+          // New user
+          const newUser: User = {
+            id: generateId(),
+            googleId: googleUser.googleId,
+            email: googleUser.email,
+            name: googleUser.name,
+            avatar: googleUser.avatar,
+            settings: {
+              theme: 'system',
+              notificationsEnabled: true,
+              notificationTimes: ['16:55', '17:30', '18:00'],
+              language: 'fr',
+              weekStartsOn: 1,
+            },
+            gamification: {
+              level: 1,
+              experience: 0,
+              streak: 0,
+              longestStreak: 0,
+              totalTasks: 0,
+              totalMinutes: 0,
+              badges: [],
+            },
+            createdAt: now,
+            updatedAt: now,
+          };
+          set({ user: newUser, isAuthenticated: true });
         }
-        return false;
       },
 
       logout: () => {
         set({ isAuthenticated: false });
-      },
-
-      createUser: async (name: string, pin: string) => {
-        const newUser: User = {
-          id: generateId(),
-          name,
-          pin: hashSimple(pin),
-          settings: {
-            theme: 'system',
-            notificationsEnabled: true,
-            notificationTimes: ['16:55', '17:30', '18:00'],
-            language: 'fr',
-            weekStartsOn: 1,
-          },
-          gamification: {
-            level: 1,
-            experience: 0,
-            streak: 0,
-            longestStreak: 0,
-            totalTasks: 0,
-            totalMinutes: 0,
-            badges: [],
-          },
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-
-        set({ user: newUser, isAuthenticated: true });
       },
 
       updateUserSettings: (settings) => {
@@ -483,13 +488,4 @@ export const useStore = create<AppState>()(
   )
 );
 
-// Simple hash function for demo purposes
-function hashSimple(str: string): string {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash;
-  }
-  return Math.abs(hash).toString(16).padStart(8, '0');
-}
+

@@ -151,9 +151,9 @@ export interface JiraTicket {
 
 export interface User {
   id: string;
+  googleId: string;
+  email: string;
   name: string;
-  pin: string; // hashed PIN
-  email?: string;
   avatar?: string;
   jira?: JiraConnection;
   settings: UserSettings;

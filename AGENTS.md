@@ -34,7 +34,7 @@ npm run type-check # TypeScript verification
 Single Zustand store in [`lib/store.ts`](lib/store.ts) with `persist` middleware → localStorage.
 
 **Common Actions:**
-- Auth: `login()`, `logout()`, `createUser()`
+- Auth: `loginWithGoogle()`, `logout()`
 - Entries: CRUD for daily tasks, validation, blockers
 - Gamification: streak tracking, badge checking, XP calculation
 - Jira: connection management, ticket planning, schedule freezing
@@ -102,9 +102,25 @@ Authentication flow in [`app/api/auth/jira/`](app/api/auth/jira/):
 - [`app/api/auth/jira/callback/route.ts`](app/api/auth/jira/callback/route.ts) — Callback
 - [`app/jira-connect/page.tsx`](app/jira-connect/page.tsx) — Connection UI
 
-### PIN Authentication
+### Google Authentication
 
-Simple hash-based user login stored in user records. No external OAuth; handled in store.
+Users authenticate exclusively via Google OAuth 2.0. No PIN or password is stored.
+
+**Flow**:
+1. User clicks "Continuer avec Google" on the login page
+2. Redirected to `/api/auth/google` — generates CSRF state token, redirects to Google
+3. Google redirects to `/api/auth/google/callback` — validates state, exchanges code for access token, fetches user profile
+4. User info (googleId, email, name, avatar) written to a short-lived `google_session` cookie
+5. Redirected to `/` — login page claims session via `/api/auth/google/session`
+6. `loginWithGoogle()` store action creates or updates the user, sets `isAuthenticated = true`
+7. Redirected to `/dashboard`
+
+**Key Files**:
+- [`app/api/auth/google/route.ts`](app/api/auth/google/route.ts) — OAuth initiation
+- [`app/api/auth/google/callback/route.ts`](app/api/auth/google/callback/route.ts) — OAuth callback
+- [`app/api/auth/google/session/route.ts`](app/api/auth/google/session/route.ts) — Session claim
+
+**Environment variables required**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
 
 ### Push Notifications
 

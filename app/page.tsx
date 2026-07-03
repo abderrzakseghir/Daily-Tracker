@@ -4,76 +4,56 @@ import * as React from 'react';
 import { useRouter } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Flame, ChevronRight } from 'lucide-react';
+import { Flame } from 'lucide-react';
 
 export default function HomePage() {
   const router = useRouter();
-  const { user, isAuthenticated, login, createUser } = useStore();
-  const [mode, setMode] = React.useState<'login' | 'register'>('login');
-  const [name, setName] = React.useState('');
-  const [pin, setPin] = React.useState('');
-  const [confirmPin, setConfirmPin] = React.useState('');
+  const { isAuthenticated, loginWithGoogle, _hasHydrated } = useStore();
   const [error, setError] = React.useState('');
   const [isLoading, setIsLoading] = React.useState(false);
 
+  // Redirect authenticated users immediately
   React.useEffect(() => {
-    if (isAuthenticated) {
+    if (_hasHydrated && isAuthenticated) {
       router.push('/dashboard');
     }
-  }, [isAuthenticated, router]);
+  }, [_hasHydrated, isAuthenticated, router]);
 
+  // Claim pending Google session after OAuth redirect
   React.useEffect(() => {
-    // If user exists, show login mode
-    if (user) {
-      setMode('login');
-    } else {
-      setMode('register');
-    }
-  }, [user]);
+    if (!_hasHydrated) return;
 
-  const handleLogin = async () => {
-    if (pin.length < 4) {
-      setError('Le code PIN doit contenir au moins 4 chiffres');
+    const params = new URLSearchParams(window.location.search);
+    const googleStatus = params.get('google');
+
+    if (googleStatus === 'error') {
+      const reason = params.get('reason') ?? 'unknown';
+      window.history.replaceState({}, '', '/');
+      setError(`La connexion Google a échoué (${reason}). Réessayez.`);
       return;
     }
 
+    // Try to claim a pending Google session cookie
     setIsLoading(true);
-    setError('');
+    fetch('/api/auth/google/session')
+      .then((res) => {
+        if (!res.ok) return null;
+        return res.json();
+      })
+      .then((data) => {
+        if (data?.userInfo) {
+          loginWithGoogle(data.userInfo);
+        }
+      })
+      .catch(() => {
+        // No pending session — normal on first visit
+      })
+      .finally(() => setIsLoading(false));
+  }, [_hasHydrated, loginWithGoogle]);
 
-    const success = await login(pin);
-
-    if (success) {
-      router.push('/dashboard');
-    } else {
-      setError('Code PIN incorrect');
-    }
-
-    setIsLoading(false);
-  };
-
-  const handleRegister = async () => {
-    if (!name.trim()) {
-      setError('Veuillez entrer votre nom');
-      return;
-    }
-
-    if (pin.length < 4 || pin.length > 6) {
-      setError('Le code PIN doit contenir 4 à 6 chiffres');
-      return;
-    }
-
-    if (pin !== confirmPin) {
-      setError('Les codes PIN ne correspondent pas');
-      return;
-    }
-
-    setIsLoading(true);
-    setError('');
-
-    await createUser(name.trim(), pin);
-    router.push('/dashboard');
+  const handleGoogleLogin = () => {
+    window.location.href = '/api/auth/google';
   };
 
   return (
@@ -90,82 +70,46 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Form */}
+        {/* Auth card */}
         <Card variant="elevated">
           <CardHeader className="text-center">
-            <CardTitle>
-              {mode === 'login' ? `Bonjour, ${user?.name}` : 'Créer un compte'}
-            </CardTitle>
+            <CardTitle>Connexion</CardTitle>
             <CardDescription>
-              {mode === 'login'
-                ? 'Entrez votre code PIN pour continuer'
-                : 'Configurez votre compte en quelques secondes'}
+              Connectez-vous avec votre compte Google pour continuer
             </CardDescription>
           </CardHeader>
 
           <CardContent className="space-y-4">
-            {mode === 'register' && (
-              <Input
-                label="Votre prénom"
-                placeholder="Jean"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoFocus
-              />
-            )}
-
-            <Input
-              label="Code PIN"
-              type="password"
-              placeholder="••••"
-              value={pin}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                setPin(value);
-              }}
-              inputMode="numeric"
-              maxLength={6}
-              autoFocus={mode === 'login'}
-            />
-
-            {mode === 'register' && (
-              <Input
-                label="Confirmer le code PIN"
-                type="password"
-                placeholder="••••"
-                value={confirmPin}
-                onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '').slice(0, 6);
-                  setConfirmPin(value);
-                }}
-                inputMode="numeric"
-                maxLength={6}
-              />
-            )}
-
             {error && (
               <p className="text-sm text-error text-center">{error}</p>
             )}
 
             <Button
               size="lg"
-              className="w-full"
-              onClick={mode === 'login' ? handleLogin : handleRegister}
+              className="w-full gap-3"
+              onClick={handleGoogleLogin}
               isLoading={isLoading}
             >
-              {mode === 'login' ? 'Se connecter' : "C'est parti !"}
-              <ChevronRight className="h-4 w-4" />
+              <svg viewBox="0 0 24 24" className="h-5 w-5 shrink-0" aria-hidden="true">
+                <path
+                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                  fill="#4285F4"
+                />
+                <path
+                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                  fill="#34A853"
+                />
+                <path
+                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                  fill="#FBBC05"
+                />
+                <path
+                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                  fill="#EA4335"
+                />
+              </svg>
+              Continuer avec Google
             </Button>
-
-            {user && mode === 'login' && (
-              <Button
-                variant="ghost"
-                className="w-full"
-                onClick={() => setMode('register')}
-              >
-                Créer un nouveau compte
-              </Button>
-            )}
           </CardContent>
         </Card>
 
@@ -188,3 +132,4 @@ export default function HomePage() {
     </div>
   );
 }
+

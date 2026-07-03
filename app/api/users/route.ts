@@ -49,10 +49,10 @@ export async function POST(request: NextRequest) {
   try {
     const user: User = await request.json();
 
-    if (!user.id || !user.name || !user.pin) {
+    if (!user.id || !user.name) {
       return NextResponse.json<ApiResponse>({
         success: false,
-        error: 'id, name, and pin are required',
+        error: 'id and name are required',
       }, { status: 400 });
     }
 
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json<ApiResponse<User>>({
       success: true,
-      data: { ...user, pin: undefined } as unknown as User,
+      data: user,
       message: 'User created successfully',
     });
   } catch (error) {
@@ -104,7 +104,7 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json<ApiResponse<User>>({
       success: true,
-      data: { ...user, pin: undefined } as unknown as User,
+      data: user,
       message: 'User updated successfully',
     });
   } catch (error) {
