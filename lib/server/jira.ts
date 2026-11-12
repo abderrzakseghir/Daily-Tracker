@@ -327,17 +327,72 @@ export async function deleteWorklog(userId: string, key: string, worklogId: stri
   }
 }
 
-/** Passe le ticket dans le premier statut de catégorie "done" disponible. */
-export async function transitionToDone(userId: string, key: string): Promise<boolean> {
-  const data = await jiraFetch<{ transitions: any[] }>(
-    userId,
-    `/rest/api/3/issue/${encodeURIComponent(key)}/transitions`,
-  );
-  const done = data.transitions?.find((t) => t.to?.statusCategory?.key === 'done');
-  if (!done) return false;
-  await jiraFetch(userId, `/rest/api/3/issue/${encodeURIComponent(key)}/transitions`, {
+/**
+ * Met à jour titre, estimation et (si non vide) description d'un ticket.
+ * Si l'écran d'édition refuse l'estimation, on réessaie sans elle.
+ */
+export async function updateIssue(
+  userId: string,
+  key: string,
+  input: { summary: string; description?: string; estimateMinutes?: number },
+): Promise<void> {
+  const base: Record<string, unknown> = {
+    summary: input.summary.slice(0, 250),
+    ...(input.description ? { description: adf(input.description) } : {}),
+  };
+  const path = `/rest/api/3/issue/${encodeURIComponent(key)}?notifyUsers=false`;
+  try {
+    await jiraFetch(userId, path, {
+      method: 'PUT',
+      body: JSON.stringify({
+        fields: {
+          ...base,
+          ...(input.estimateMinutes ? { timetracking: { originalEstimate: `${input.estimateMinutes}m` } } : {}),
+        },
+      }),
+    });
+  } catch (err) {
+    if (!(err instanceof JiraApiError) || err.status !== 400 || !input.estimateMinutes) throw err;
+    await jiraFetch(userId, path, { method: 'PUT', body: JSON.stringify({ fields: base }) });
+  }
+}
+
+export type StatusCategory = 'new' | 'indeterminate' | 'done';
+
+const CATEGORY_LABELS: Record<StatusCategory, string> = {
+  new: 'À faire',
+  indeterminate: 'En cours',
+  done: 'Terminé',
+};
+
+/**
+ * Amène le ticket dans un statut de la catégorie voulue (À faire / En cours / Terminé).
+ * Ne fait rien s'il y est déjà ; lève si le workflow n'offre aucune transition adaptée.
+ */
+export async function transitionToCategory(
+  userId: string,
+  key: string,
+  category: StatusCategory,
+): Promise<boolean> {
+  const issue = await getIssue(userId, key);
+  if (issue.statusCategory === category) return false;
+  const path = `/rest/api/3/issue/${encodeURIComponent(key)}/transitions`;
+  const data = await jiraFetch<{ transitions: any[] }>(userId, path);
+  const target = data.transitions?.find((t) => t.to?.statusCategory?.key === category);
+  if (!target) {
+    throw new HttpError(
+      400,
+      `Jira : aucune transition vers « ${CATEGORY_LABELS[category]} » depuis « ${issue.status} ».`,
+    );
+  }
+  await jiraFetch(userId, path, {
     method: 'POST',
-    body: JSON.stringify({ transition: { id: done.id } }),
+    body: JSON.stringify({ transition: { id: target.id } }),
   });
   return true;
+}
+
+/** Passe le ticket dans le premier statut de catégorie "done" disponible. */
+export async function transitionToDone(userId: string, key: string): Promise<boolean> {
+  return transitionToCategory(userId, key, 'done');
 }

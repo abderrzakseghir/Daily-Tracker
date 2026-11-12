@@ -1,13 +1,27 @@
 import { assertDate, HttpError, ok, withUser } from '@/lib/server/http';
-import { createIssue, getJiraConnection, jiraErrorMessage, pickIssueType } from '@/lib/server/jira';
-import { getSettings, maybeTransitionDone, replanDay } from '@/lib/server/repo';
+import {
+  createIssue,
+  getJiraConnection,
+  jiraErrorMessage,
+  pickIssueType,
+  transitionToCategory,
+  updateIssue,
+  type StatusCategory,
+} from '@/lib/server/jira';
+import { getSettings, replanDay } from '@/lib/server/repo';
 import { db } from '@/lib/server/supabase';
-import type { Task } from '@/types';
+import type { Task, TaskStatus } from '@/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 const PROJECT_KEY = /^[A-Z][A-Z0-9_]{0,19}$/;
+
+const STATUS_CATEGORY: Record<TaskStatus, StatusCategory> = {
+  todo: 'new',
+  in_progress: 'indeterminate',
+  done: 'done',
+};
 
 /** Exécute `fn` sur chaque élément avec au plus `limit` appels Jira simultanés. */
 async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>) {
@@ -27,10 +41,17 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T) => Promis
   return results;
 }
 
+/** Titre sans le préfixe « KEY · » ajouté à l'import d'un ticket. */
+function summaryOf(t: Task, key: string) {
+  const prefix = `${key} · `;
+  return t.title.startsWith(prefix) ? t.title.slice(prefix.length) : t.title;
+}
+
 /**
  * POST /api/jira/export { date, projectKey, taskIds? }
- * Crée un ticket Jira pour chaque tâche de la journée qui n'en a pas encore
- * (estimation = durée planifiée), puis aligne les worklogs de toutes les tâches liées.
+ *  - crée un ticket pour chaque tâche (choisie) qui n'en a pas, dans son vrai statut ;
+ *  - met à jour tous les tickets déjà liés : titre, description, estimation, statut ;
+ *  - aligne les worklogs (temps planifié des tâches terminées).
  * Ré-exécutable : seules les tâches sans ticket sont créées.
  */
 export const POST = withUser(async (req, { userId }) => {
@@ -44,6 +65,7 @@ export const POST = withUser(async (req, { userId }) => {
   // Durées et horaires à jour avant de les envoyer
   const day = await replanDay(userId, date, settings);
   const toCreate = day.tasks.filter((t) => !t.jiraKey && (!taskIds || taskIds.includes(t.id)));
+  const toUpdate = day.tasks.filter((t) => t.jiraKey);
 
   const errors: string[] = [];
   const created: Task[] = [];
@@ -87,12 +109,27 @@ export const POST = withUser(async (req, { userId }) => {
     });
   }
 
+  // Tickets existants : tous les champs ; nouveaux : seulement le statut (le reste vient d'être posé)
+  const jobs = [
+    ...toUpdate.map((t) => ({ task: t, key: t.jiraKey!, fields: true })),
+    ...created.map((t) => ({ task: t, key: t.jiraKey!, fields: false })),
+  ];
+  const pushed = await mapLimit(jobs, 3, async ({ task, key, fields }) => {
+    if (fields) {
+      await updateIssue(userId, key, {
+        summary: summaryOf(task, key),
+        description: task.description,
+        estimateMinutes: task.durationMinutes,
+      });
+    }
+    await transitionToCategory(userId, key, STATUS_CATEGORY[task.status]);
+  });
+  pushed.forEach((r, i) => {
+    if (r.status === 'rejected') errors.push(`${jobs[i].key} : ${jiraErrorMessage(r.reason)}`);
+  });
+
   // Worklogs : tâches terminées → temps planifié loggé, les autres → aucun worklog
   const synced = await replanDay(userId, date, { ...settings, autoSyncWorklog: true });
-
-  await Promise.all(
-    created.filter((t) => t.status === 'done').map((t) => maybeTransitionDone(userId, t, settings)),
-  );
 
   const syncErrors = synced.tasks.filter((t) => t.jiraKey && t.jiraSyncError).length;
   if (syncErrors > 0) errors.push(`${syncErrors} worklog(s) n'ont pas pu être enregistrés.`);
@@ -100,7 +137,7 @@ export const POST = withUser(async (req, { userId }) => {
   return ok({
     days: [synced],
     created: created.length,
-    linked: synced.tasks.filter((t) => t.jiraKey).length,
+    updated: toUpdate.length,
     warning: errors.length ? errors.join('\n') : undefined,
   });
 });

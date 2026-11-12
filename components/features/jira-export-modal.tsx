@@ -8,7 +8,7 @@ import { formatDuration } from '@/lib/planner';
 import { relativeDayLabel } from '@/lib/dates';
 import { toast } from '@/lib/store';
 import { cn } from '@/lib/utils';
-import type { Task } from '@/types';
+import { TASK_STATUS_LABELS, type Task } from '@/types';
 
 interface JiraExportModalProps {
   isOpen: boolean;
@@ -53,12 +53,11 @@ export function JiraExportModal({ isOpen, onClose, date, tasks, defaultProject }
     setSaving(false);
     if (!res) return;
     if (!res.warning) {
-      toast(
-        res.created > 0
-          ? `${res.created} ticket(s) créé(s) sur Jira, temps à jour`
-          : 'Temps Jira mis à jour',
-        'success',
-      );
+      const parts = [
+        res.created > 0 && `${res.created} ticket(s) créé(s)`,
+        res.updated > 0 && `${res.updated} mis à jour`,
+      ].filter(Boolean);
+      toast(`Jira : ${parts.join(', ')}`, 'success');
     }
     onClose();
   };
@@ -74,7 +73,7 @@ export function JiraExportModal({ isOpen, onClose, date, tasks, defaultProject }
         <>
           <Button variant="outline" onClick={onClose}>Annuler</Button>
           <Button onClick={submit} disabled={!canSubmit} isLoading={saving}>
-            {count > 0 ? `Créer ${count} ticket(s)` : 'Mettre à jour les temps'}
+            {count > 0 ? `Créer ${count} ticket(s)` : 'Mettre à jour Jira'}
           </Button>
         </>
       }
@@ -135,7 +134,7 @@ export function JiraExportModal({ isOpen, onClose, date, tasks, defaultProject }
         {linked.length > 0 && (
           <section className="space-y-1.5">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Déjà sur Jira ({linked.length}) — temps mis à jour
+              Déjà sur Jira ({linked.length}) — mis à jour
             </h3>
             <ul className="divide-y divide-border rounded-xl border border-border">
               {linked.map((t) => (
@@ -157,9 +156,11 @@ export function JiraExportModal({ isOpen, onClose, date, tasks, defaultProject }
         )}
 
         <p className="text-xs text-muted">
-          Chaque ticket vous est assigné avec une estimation égale à la durée planifiée. Le temps
-          passé est enregistré sur les tâches terminées, à leur horaire planifié. Vous pouvez
-          relancer l&apos;export à tout moment : seules les nouvelles tâches sont créées.
+          Les tickets sont créés dans le même statut que la tâche (À faire, En cours, Terminé),
+          vous sont assignés, avec une estimation égale à la durée planifiée. Les tickets déjà liés
+          sont entièrement mis à jour : titre, description, estimation, statut et temps passé
+          (enregistré sur les tâches terminées, à leur horaire planifié). Relancez l&apos;export à
+          tout moment : seules les nouvelles tâches sont créées.
         </p>
       </div>
     </Modal>
@@ -172,7 +173,7 @@ function TimeLabel({ task }: { task: Task }) {
     <span className={cn('shrink-0 text-xs tabular-nums', done ? 'text-success' : 'text-muted')}>
       {task.startTime ? `${task.startTime} · ` : ''}
       {formatDuration(task.durationMinutes)}
-      {done ? ' · terminée' : ''}
+      {` · ${TASK_STATUS_LABELS[task.status]}`}
     </span>
   );
 }

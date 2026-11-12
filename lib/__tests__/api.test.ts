@@ -33,19 +33,45 @@ async function call(handler: any, method: string, url: string, body?: unknown, p
 
 /** Faux Jira : enregistre les appels et répond comme l'API Cloud. */
 const jiraCalls: { method: string; url: string; body: any }[] = [];
+/** Catégorie de statut courante de chaque ticket du faux Jira. */
+const jiraStatus = new Map<string, string>();
+const TRANSITIONS = [
+  { id: '11', to: { statusCategory: { key: 'new' } } },
+  { id: '21', to: { statusCategory: { key: 'indeterminate' } } },
+  { id: '31', to: { statusCategory: { key: 'done' } } },
+];
 function mockJira() {
   let worklogSeq = 0;
   let issueSeq = 0;
+  jiraStatus.clear();
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET';
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     jiraCalls.push({ method, url, body });
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
+    const noContent = () => new Response(null, { status: 204 });
     if (url.includes('/issuetypes')) return json({ issueTypes: [{ id: '10001', name: 'Task', subtask: false }] });
-    if (url.endsWith('/rest/api/3/issue') && method === 'POST') return json({ key: `DT-${++issueSeq}` }, 201);
+    if (url.endsWith('/rest/api/3/issue') && method === 'POST') {
+      const key = `DT-${++issueSeq}`;
+      jiraStatus.set(key, 'new');
+      return json({ key }, 201);
+    }
     if (url.includes('/worklog') && method === 'POST') return json({ id: String(++worklogSeq) }, 201);
     if (url.includes('/worklog/') && method === 'PUT') return json({ id: url.split('/worklog/')[1].split('?')[0] });
-    if (url.includes('/worklog/') && method === 'DELETE') return new Response(null, { status: 204 });
+    if (url.includes('/worklog/') && method === 'DELETE') return noContent();
+    const m = url.match(/\/rest\/api\/3\/issue\/([A-Z]+-\d+)(\/transitions)?(\?|$)/);
+    if (m && m[2] && method === 'GET') return json({ transitions: TRANSITIONS });
+    if (m && m[2] && method === 'POST') {
+      jiraStatus.set(m[1], TRANSITIONS.find((t) => t.id === body.transition.id)!.to.statusCategory.key);
+      return noContent();
+    }
+    if (m && method === 'PUT') return noContent();
+    if (m && method === 'GET') {
+      return json({
+        key: m[1],
+        fields: { summary: '', status: { name: 'Statut', statusCategory: { key: jiraStatus.get(m[1]) ?? 'new' } } },
+      });
+    }
     return json({ errorMessages: ['not mocked'] }, 404);
   }));
 }
@@ -185,7 +211,12 @@ describe('Synchronisation Jira', () => {
     await call(taskRoute.PATCH, 'PATCH', '/x', { status: 'done' }, { id: a.json.data.taskId });
 
     const r = await call(exportRoute.POST, 'POST', '/api/jira/export', { date: DATE, projectKey: 'DT' });
-    expect(r.json.data).toMatchObject({ created: 2, linked: 2 });
+    expect(r.json.data).toMatchObject({ created: 2, updated: 0 });
+    expect(r.json.data.warning).toBeUndefined();
+    // Créés dans leur vrai statut
+    const keyOf = (title: string) => dayTasks().find((t) => t.title === title)!.jira_key;
+    expect(jiraStatus.get(keyOf('API'))).toBe('done');
+    expect(jiraStatus.get(keyOf('Front'))).toBe('new');
     const creations = jiraCalls.filter((c) => c.method === 'POST' && c.url.endsWith('/rest/api/3/issue'));
     expect(creations.map((c) => c.body.fields.timetracking)).toEqual([
       { originalEstimate: '225m' },
@@ -198,14 +229,38 @@ describe('Synchronisation Jira', () => {
     expect(worklogs).toHaveLength(1);
     expect(worklogs[0].body).toMatchObject({ started: '2026-11-10T09:00:00.000+0100', timeSpentSeconds: 225 * 60 });
 
-    // Nouvelle tâche ajoutée ensuite → un seul ticket de plus
+    // Modifs locales + nouvelle tâche → un seul ticket de plus, les autres entièrement mis à jour
+    const front = dayTasks().find((t) => t.title === 'Front')!;
+    await call(taskRoute.PATCH, 'PATCH', '/x', { title: 'Front v2', description: 'Écran login', status: 'in_progress' }, { id: front.id });
     await call(tasksRoute.POST, 'POST', '/api/tasks', { date: DATE, title: 'Doc', points: 2 });
     jiraCalls.length = 0;
     const again = await call(exportRoute.POST, 'POST', '/api/jira/export', { date: DATE, projectKey: 'DT' });
-    expect(again.json.data).toMatchObject({ created: 1, linked: 3 });
+    expect(again.json.data).toMatchObject({ created: 1, updated: 2 });
     const second = jiraCalls.filter((c) => c.method === 'POST' && c.url.endsWith('/rest/api/3/issue'));
     expect(second.map((c) => c.body.fields.summary)).toEqual(['Doc']);
     expect(new Set(dayTasks().map((t) => t.jira_key)).size).toBe(3);
+
+    const frontKey = keyOf('Front v2');
+    const put = jiraCalls.find((c) => c.method === 'PUT' && c.url.includes(`/issue/${frontKey}?`))!;
+    expect(put.body.fields.summary).toBe('Front v2');
+    expect(put.body.fields.description.content[0].content[0].text).toBe('Écran login');
+    expect(put.body.fields.timetracking.originalEstimate).toMatch(/^\d+m$/);
+    expect(jiraStatus.get(frontKey)).toBe('indeterminate');
+  });
+
+  it("met à jour un ticket importé sans dupliquer la clé dans son titre", async () => {
+    tables.tasks.push({
+      id: 'imp-1', user_id: USER, date: DATE, title: 'DT-9 · Bug paiement', description: '', category: 'development',
+      points: 5, status: 'todo', position: 0, manual_duration: null, duration_minutes: 60, start_time: null, pinned: false,
+      actual_minutes: 0, jira_key: 'DT-9', jira_url: 'u', jira_project_key: 'DT', created_at: new Date().toISOString(),
+    });
+    jiraStatus.set('DT-9', 'done');
+    const r = await call(exportRoute.POST, 'POST', '/api/jira/export', { date: DATE });
+    expect(r.json.data).toMatchObject({ created: 0, updated: 1 });
+    const put = jiraCalls.find((c) => c.method === 'PUT' && c.url.includes('/issue/DT-9?'))!;
+    expect(put.body.fields.summary).toBe('Bug paiement');
+    expect(put.body.fields.description).toBeUndefined(); // description vide : celle de Jira est conservée
+    expect(jiraStatus.get('DT-9')).toBe('new');
   });
 
   it("refuse l'export sans projet quand des tickets sont à créer", async () => {

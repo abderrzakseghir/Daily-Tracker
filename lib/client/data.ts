@@ -323,7 +323,7 @@ export function importJiraIssues(date: string, issues: { key: string; points: nu
 
 export function exportToJira(date: string, projectKey: string | null, taskIds: string[]) {
   return run(
-    api<DaysResponse & { created: number; linked: number }>('/api/jira/export', {
+    api<DaysResponse & { created: number; updated: number }>('/api/jira/export', {
       method: 'POST',
       json: { date, projectKey, taskIds },
     }),
