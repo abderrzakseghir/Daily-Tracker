@@ -48,6 +48,7 @@ export async function GET(req: NextRequest) {
     // ② Site Jira (pas Confluence)
     const resourcesRes = await fetch('https://api.atlassian.com/oauth/token/accessible-resources', {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
+      cache: 'no-store',
     });
     if (!resourcesRes.ok) return done('jira=error&reason=resources');
     const resources: { id: string; name: string; url: string; scopes: string[] }[] =
@@ -59,6 +60,7 @@ export async function GET(req: NextRequest) {
     // ③ Profil Jira
     const meRes = await fetch(`https://api.atlassian.com/ex/jira/${site.id}/rest/api/3/myself`, {
       headers: { Authorization: `Bearer ${tokens.access_token}`, Accept: 'application/json' },
+      cache: 'no-store',
     });
     if (!meRes.ok) return done('jira=error&reason=profile');
     const me = await meRes.json();

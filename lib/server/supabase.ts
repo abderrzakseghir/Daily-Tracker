@@ -18,6 +18,9 @@ export function db(): SupabaseClient {
   }
   client = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
+    // Next.js 14 met en cache les fetch() serveur (Data Cache) : sans `no-store`,
+    // les lectures Supabase restaient figées et une tâche créée « disparaissait ».
+    global: { fetch: (input, init) => fetch(input, { ...init, cache: 'no-store' }) },
   });
   return client;
 }

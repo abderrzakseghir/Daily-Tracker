@@ -44,6 +44,7 @@ export async function GET(req: NextRequest) {
     // ② Profil
     const profileRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
       headers: { Authorization: `Bearer ${tokens.access_token}` },
+      cache: 'no-store', // l'identité ne doit jamais venir d'un cache
     });
     if (!profileRes.ok) return fail('profile');
     const profile = (await profileRes.json()) as {

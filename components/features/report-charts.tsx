@@ -90,11 +90,16 @@ export const HoursChart = React.forwardRef<ChartJS<'bar'>, { buckets: Bucket[] }
       ...base.plugins,
       tooltip: {
         ...base.plugins!.tooltip,
+        // Le filtre peut retirer toutes les entrées (jour sans temps réalisé) :
+        // les callbacks doivent accepter une liste vide.
         filter: (item) => (item.raw as number) > 0,
         callbacks: {
-          title: (items) => buckets[items[0].dataIndex]?.tooltipTitle ?? '',
+          title: (items) => (items.length ? buckets[items[0].dataIndex]?.tooltipTitle ?? '' : ''),
           label: (item) => ` ${item.dataset.label} : ${formatDuration(Math.round((item.raw as number) * 60))}`,
-          footer: (items) => `Total : ${formatDuration(Math.round(items.reduce((s, i) => s + (i.raw as number), 0) * 60))}`,
+          footer: (items) =>
+            items.length
+              ? `Total : ${formatDuration(Math.round(items.reduce((s, i) => s + (i.raw as number), 0) * 60))}`
+              : '',
         },
       },
     },
@@ -185,8 +190,10 @@ export const WellbeingChart = React.forwardRef<ChartJS<'line'>, { buckets: Bucke
       ...base.plugins,
       tooltip: {
         ...base.plugins!.tooltip,
+        // Jours sans humeur/énergie saisie : valeurs null, à ne pas afficher.
+        filter: (item) => typeof item.raw === 'number',
         callbacks: {
-          title: (items) => buckets[items[0].dataIndex]?.tooltipTitle ?? '',
+          title: (items) => (items.length ? buckets[items[0].dataIndex]?.tooltipTitle ?? '' : ''),
           label: (item) => {
             const v = item.raw as number;
             const l = labelFor(item.datasetIndex === 0 ? MOODS : ENERGIES, v);

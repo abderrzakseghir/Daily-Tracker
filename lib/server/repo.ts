@@ -190,7 +190,7 @@ export async function replanDay(userId: string, date: string, settings?: UserSet
       db()
         .from('tasks')
         .update({ start_time: t.startTime, duration_minutes: t.durationMinutes })
-        .eq('id', t.id),
+        .eq('id', t.id).eq('user_id', userId),
     ),
   );
 
@@ -240,7 +240,7 @@ export async function syncWorklog(userId: string, t: Task, s: UserSettings): Pro
           jira_synced_at: now,
           jira_sync_error: null,
         })
-        .eq('id', t.id);
+        .eq('id', t.id).eq('user_id', userId);
       return;
     }
     const time = t.startTime ?? s.workdayStart;
@@ -260,11 +260,11 @@ export async function syncWorklog(userId: string, t: Task, s: UserSettings): Pro
         jira_synced_at: now,
         jira_sync_error: null,
       })
-      .eq('id', t.id);
+      .eq('id', t.id).eq('user_id', userId);
   } catch (err) {
     const message = jiraErrorMessage(err);
     console.error('[Jira sync]', t.jiraKey, message);
-    await db().from('tasks').update({ jira_sync_error: message }).eq('id', t.id);
+    await db().from('tasks').update({ jira_sync_error: message }).eq('id', t.id).eq('user_id', userId);
   }
 }
 

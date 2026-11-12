@@ -93,10 +93,10 @@ export async function attachJira(
     await db()
       .from('tasks')
       .update({ jira_key: key, jira_url: url, jira_project_key: projectKey, jira_sync_error: null })
-      .eq('id', taskId);
+      .eq('id', taskId).eq('user_id', userId);
   } catch (err) {
     const msg = jiraErrorMessage(err);
-    await db().from('tasks').update({ jira_sync_error: msg }).eq('id', taskId);
+    await db().from('tasks').update({ jira_sync_error: msg }).eq('id', taskId).eq('user_id', userId);
     return msg;
   }
 }

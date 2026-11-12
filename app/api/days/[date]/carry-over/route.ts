@@ -24,7 +24,7 @@ export const POST = withUser<{ params: { date: string } }>(async (req, { params,
       db()
         .from('tasks')
         .update({ date: to, position: start + i, pinned: false, updated_at: new Date().toISOString() })
-        .eq('id', t.id),
+        .eq('id', t.id).eq('user_id', userId),
     ),
   );
 
