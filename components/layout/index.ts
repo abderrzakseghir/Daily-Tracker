@@ -1,2 +1,2 @@
-export { Navigation } from './navigation';
-export { AppLayout } from './app-layout';
+export { Navigation, Logo } from './navigation';
+export { AppLayout, PageHeader } from './app-layout';

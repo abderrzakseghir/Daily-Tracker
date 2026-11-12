@@ -3,11 +3,11 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 
-const inter = Inter({ subsets: ['latin'] });
+const inter = Inter({ subsets: ['latin'], variable: '--font-sans' });
 
 export const metadata: Metadata = {
   title: 'Daily Tracker',
-  description: 'Application de suivi quotidien pour les Daily Scrum',
+  description: 'Suivez vos tâches quotidiennes, planifiez-les et synchronisez-les avec Jira',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -15,34 +15,25 @@ export const metadata: Metadata = {
     title: 'Daily Tracker',
   },
   icons: {
-    icon: '/icon-192.png',
-    apple: '/apple-icon-180.png',
+    icon: '/icon-192.svg',
+    apple: '/apple-icon-180.svg',
   },
 };
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  viewportFit: 'cover',
   themeColor: [
-    { media: '(prefers-color-scheme: light)', color: '#FAFAFA' },
-    { media: '(prefers-color-scheme: dark)', color: '#0A0A0A' },
+    { media: '(prefers-color-scheme: light)', color: '#f6f7f9' },
+    { media: '(prefers-color-scheme: dark)', color: '#0b0c10' },
   ],
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr" suppressHydrationWarning>
-      <head>
-        <link rel="apple-touch-icon" href="/apple-icon-180.png" />
-        <meta name="apple-mobile-web-app-capable" content="yes" />
-      </head>
-      <body className={`${inter.className} antialiased`}>
+      <body className={`${inter.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
       </body>
     </html>

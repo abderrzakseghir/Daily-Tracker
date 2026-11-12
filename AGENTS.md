@@ -10,170 +10,57 @@ npm run build      # Production build
 npm run start      # Run production build
 npm run lint       # ESLint
 npm run type-check # TypeScript verification
+npm test           # Vitest unit + API tests
 ```
 
 ## 🏗️ Project Architecture
 
 ### Folder Structure
 
-- **`app/`** — Next.js App Router, pages + API routes
-  - `app/daily-meeting/`, `app/dashboard/`, `app/history/`, `app/reports/`, `app/settings/`, `app/jira-connect/`, `app/timeblocking/`
-  - `app/api/auth/jira/` — Jira OAuth 2.0 flow
-  - `app/api/entries/`, `app/api/jira/`, `app/api/notifications/`, `app/api/users/`
-- **`components/`** — Organized by concern:
-  - `ui/` — Reusable components (button, card, input, select, modal, progress, badge)
-  - `features/` — Domain-specific components (daily-meeting-view, task-form, task-card, calendar-view, charts)
-  - `layout/` — App structure (navigation, app-layout)
-- **`lib/`** — Core logic: Zustand store, utilities, calculations, timeblocking
-- **`services/`** — Centralized API client (ApiService with `ApiResponse<T>` wrapper)
-- **`types/`** — Shared TypeScript definitions
-- **`public/`** — PWA manifest, service worker
+- **`app/`** — Next.js App Router pages + API routes
+  - Pages: `/` (login), `/dashboard` (today), `/day/[date]`, `/planning`, `/history`, `/reports`, `/daily-meeting`, `/settings`
+  - `app/api/auth/{google,jira,logout}` — OAuth flows + session
+  - `app/api/{me,days,tasks,templates,jira,search,export,import,push,cron,health}`
+- **`components/`**
+  - `ui/` — primitives (button, card, modal, toaster, controls: PointsPicker, Switch, Segmented…)
+  - `features/` — calendar-grid, day-view, task-editor, task-item, quick-add, jira-*, focus-timer, report-charts
+  - `layout/` — navigation, app-layout (`AppLayout`, `PageHeader`)
+- **`lib/`**
+  - `planner.ts` — pure points → duration → schedule algorithm (shared client/server, unit-tested)
+  - `quick-add.ts` — natural-language task parser
+  - `dates.ts`, `stats.ts`, `utils.ts`
+  - `store.ts` — Zustand **UI-only** state (toasts, focus timer, view prefs)
+  - `client/` — `api()` fetch wrapper, SWR hooks + optimistic actions (`data.ts`)
+  - `server/` — server-only: `env` (canonical APP_URL), `session` (HMAC cookie), `supabase`, `jira`, `repo`, `tasks`, `http`
+- **`supabase/schema.sql`** — database schema (run once in Supabase SQL editor)
+- **`types/index.ts`** — shared types & constants
 
-### State Management
+### Data flow
 
-Single Zustand store in [`lib/store.ts`](lib/store.ts) with `persist` middleware → localStorage.
-
-**Common Actions:**
-- Auth: `loginWithGoogle()`, `logout()`
-- Entries: CRUD for daily tasks, validation, blockers
-- Gamification: streak tracking, badge checking, XP calculation
-- Jira: connection management, ticket planning, schedule freezing
-
-Use `const { action } = useStore()` in components.
+- **Source of truth = Supabase** (Postgres). Routes use the `service_role` key; RLS is enabled with no policies, so the anon key can read nothing.
+- Auth = Google OAuth → signed `dt_session` cookie (30 days). `middleware.ts` guards pages; API routes use `withUser()` from `lib/server/http.ts`.
+- Every task mutation calls `replanDay()` server-side: recompute durations/start times, persist, then sync Jira worklogs if `autoSyncWorklog`.
+- Client: SWR range keys `/api/days?from=&to=`; mutations update every cached range optimistically (re-planned locally with `applyPlan`) and are replaced by the server response.
+- Jira tokens never reach the browser; they are refreshed in `lib/server/jira.ts`.
+- OAuth `redirect_uri` is always built from `APP_URL` (`lib/server/env.ts`) — never from the request origin.
 
 ## 🎨 Development Patterns
 
-### Components
-
-```typescript
-// Use 'use client' for interactive components
-'use client';
-
-interface Props {
-  label: string;
-  onClick: () => void;
-}
-
-export function MyComponent({ label, onClick }: Props) {
-  // Destructure props, use Tailwind + clsx + CVA for styling
-  return <button className={cn('...', className)}>{label}</button>;
-}
-```
-
-### API Routes & Responses
-
-All endpoints return `{ success: boolean, data?: T, error?: string }`.
-
-**Example** (POST endpoint):
-```typescript
-export async function POST(request: Request) {
-  const body = await request.json();
-  // Process...
-  return Response.json({ success: true, data: result });
-}
-```
-
-### Dates
-
-- **Storage**: ISO format `YYYY-MM-DD` (strings)
-- **Display**: French locale via `date-fns`
-- Use `date-fns` for all date manipulation
-
-### Types & Constants
-
-- **Const enums** for categories, durations, badge types
-- Keep types in [`types/index.ts`](types/index.ts)
-- Example categories: work, learning, admin, meeting, break, health, personal, other (with emoji, French labels)
-
-## 🔗 Key Integrations
-
-### Jira OAuth 2.0
-
-Authentication flow in [`app/api/auth/jira/`](app/api/auth/jira/):
-1. **Initiate** — Generates CSRF state token, redirects to Atlassian auth page
-2. **Callback** — Validates state, exchanges auth code for access token
-3. **Cloud ID** — Fetches accessible resources, filters for Jira (not Confluence)
-4. **Store** — Saves connection with tokens, user info, expiration time
-
-**Scopes**: `read:jira-user read:jira-work write:jira-work offline_access read:account`
-
-**Key Files**:
-- [`app/api/auth/jira/route.ts`](app/api/auth/jira/route.ts) — Init
-- [`app/api/auth/jira/callback/route.ts`](app/api/auth/jira/callback/route.ts) — Callback
-- [`app/jira-connect/page.tsx`](app/jira-connect/page.tsx) — Connection UI
-
-### Google Authentication
-
-Users authenticate exclusively via Google OAuth 2.0. No PIN or password is stored.
-
-**Flow**:
-1. User clicks "Continuer avec Google" on the login page
-2. Redirected to `/api/auth/google` — generates CSRF state token, redirects to Google
-3. Google redirects to `/api/auth/google/callback` — validates state, exchanges code for access token, fetches user profile
-4. User info (googleId, email, name, avatar) written to a short-lived `google_session` cookie
-5. Redirected to `/` — login page claims session via `/api/auth/google/session`
-6. `loginWithGoogle()` store action creates or updates the user, sets `isAuthenticated = true`
-7. Redirected to `/dashboard`
-
-**Key Files**:
-- [`app/api/auth/google/route.ts`](app/api/auth/google/route.ts) — OAuth initiation
-- [`app/api/auth/google/callback/route.ts`](app/api/auth/google/callback/route.ts) — OAuth callback
-- [`app/api/auth/google/session/route.ts`](app/api/auth/google/session/route.ts) — Session claim
-
-**Environment variables required**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-
-### Push Notifications
-
-Web Push API via service worker ([`public/sw.js`](public/sw.js)). Configured in settings, triggered by API.
-
-### Cloud Storage
-
-Vercel Blob (`@vercel/blob`) for PDF exports. Used in reports generation.
-
-## 📋 Common Tasks
-
-### Adding a New Page
-
-1. Create `app/new-feature/page.tsx`
-2. Add navigation link in [`components/layout/navigation.tsx`](components/layout/navigation.tsx)
-3. Use layout in [`components/layout/app-layout.tsx`](components/layout/app-layout.tsx)
-4. Fetch store data with `const { data } = useStore()`
-
-### Adding a New Feature Component
-
-1. Create in `components/features/my-feature.tsx`
-2. Use `'use client'` directive
-3. Export from [`components/features/index.ts`](components/features/index.ts)
-4. Import in page: `import { MyFeature } from '@/components/features'`
-
-### Adding an API Endpoint
-
-1. Create `app/api/new-endpoint/route.ts`
-2. Return `{ success, data, error }` wrapper
-3. Use `ApiService` in frontend for type-safe calls
-4. Test with `npm run type-check`
-
-### Modifying Store Logic
-
-1. Edit [`lib/store.ts`](lib/store.ts) — Keep it single file for simplicity
-2. Add action, update TypeScript types
-3. Persist automatically via middleware
-4. Update affected components that use the state
+- Interactive components use `'use client'`, typed destructured props, Tailwind + `cn()`.
+- API routes: wrap with `withUser(async (req, { userId, params }) => ok(data))`; throw `HttpError(status, message)` for user errors (French messages).
+- Dates are `YYYY-MM-DD` strings computed on the client (`lib/dates.ts`, date-fns `fr` locale).
+- Category colors come from a CVD-validated palette in `types/index.ts` (fixed order — do not reorder).
+- Tests: `npm test` (vitest). `lib/__tests__/fake-supabase.ts` is an in-memory Supabase used to test real route handlers.
 
 ## 🎮 Gamification System
 
-- **Streak**: Consecutive days with validated entries
-- **Levels**: Based on XP (earned per day, per badge)
-- **Badges**: Achievement-based (first entry, 7-day streak, 100+ entries, etc.)
-- **Variants**: Track progress for each badge type
-
-Calculation logic in [`lib/calculations.ts`](lib/calculations.ts).
+- **Streak**: consecutive validated workdays (`computeStreak` in [`lib/stats.ts`](lib/stats.ts)), shown on the day view and history.
 
 ## 🌍 Localization
 
 All user-facing text is **French**:
-- Category labels: "Travail", "Apprentissage", "Administration", etc.
-- Date display: `formatDate(date, 'dd MMMM yyyy', { locale: fr })`
+- Category labels in `CATEGORY_LABELS` (types/index.ts)
+- Date display: `fmt(date, 'EEEE d MMMM')` from `lib/dates.ts` (date-fns, `fr` locale)
 - Error messages, labels, placeholders
 - Keep translation strings in types/constants, not hardcoded
 
@@ -181,31 +68,32 @@ All user-facing text is **French**:
 
 | Feature | Files | Purpose |
 |---------|-------|---------|
-| **Dashboard** | `app/dashboard/`, `components/features/category-chart.tsx`, `weekly-chart.tsx` | Task overview by category, stats |
-| **Daily Meeting** | `app/daily-meeting/`, `components/features/daily-meeting-view.tsx` | Optimized presentation view (yesterday, today, blockers) |
-| **Timeblocking** | `app/timeblocking/`, `lib/timeblocking.ts`, `components/features/timeblocking-calendar.tsx` | Schedule with Jira ticket integration |
-| **History** | `app/history/`, `components/features/day-validation.tsx` | Calendar view, modify past entries |
-| **Reports** | `app/reports/` | PDF export with task breakdown (Vercel Blob) |
-| **Jira** | `app/jira-connect/`, `app/api/jira/`, integration throughout | Ticket planning, worklog sync |
-| **Notifications** | `app/api/notifications/`, `public/sw.js` | Push notifications config |
+| **Day** | `app/dashboard/`, `app/day/[date]/`, `components/features/day-view.tsx` | Quick add, reorderable list, day agenda, mood/blockers/notes, validation |
+| **Planning** | `app/planning/`, `components/features/calendar-grid.tsx`, `lib/planner.ts` | Week calendar, drag & drop / resize task cards |
+| **Jira** | `lib/server/jira.ts`, `lib/server/repo.ts` (`syncWorklog`), `app/api/jira/*`, `components/features/jira-*` | Create/link issues, import, automatic worklogs |
+| **History** | `app/history/`, `app/api/search/` | Month heatmap, streaks, search, edit past days |
+| **Reports** | `app/reports/`, `components/features/report-charts.tsx` | Charts (chart.js), table view, PDF/CSV export |
+| **Daily Meeting** | `app/daily-meeting/` | Yesterday / today / blockers, present mode, copy for Slack |
+| **Focus & reminders** | `components/features/focus-timer.tsx`, `app/api/push/`, `app/api/cron/reminder/`, `public/sw.js` | Pomodoro timer, end-of-day push reminder |
 
 ## 🐛 Common Pitfalls & Tips
 
 1. **Date Handling**: Always store as `YYYY-MM-DD` strings, format with `date-fns` for display. Never hardcode English date strings.
 2. **Type Safety**: Run `npm run type-check` before committing. Use strict TypeScript mode.
-3. **Store Updates**: Zustand merges state — partial updates work automatically. No need for reducers.
+3. **Data**: never persist business data in Zustand/localStorage — go through the API + `lib/client/data.ts` actions.
 4. **Component Props**: Always destructure and type props explicitly; avoid spreading unknown props.
 5. **Styling**: Use Tailwind first, CVA for complex component variants, `clsx`/`tailwind-merge` for conditional classes.
 6. **API Errors**: Always check `success` flag and handle `error` field in responses.
 7. **PWA Service Worker**: Keep [`public/sw.js`](public/sw.js) lightweight; lazy-load routes.
-8. **Jira Token Refresh**: OAuth tokens have expiration; implement refresh logic for long-lived sessions.
+8. **Jira**: always call Jira through `jiraFetch()` (auto refresh of rotating refresh tokens). Never expose tokens to the client.
+9. **OAuth URLs**: build redirect URIs with `googleRedirectUri()` / `jiraRedirectUri()` — never `req.nextUrl.origin`.
 
 ## 📝 Code Quality
 
 - **Linting**: ESLint config via `eslint-config-next`
 - **TypeScript**: Strict mode enabled, check with `npm run type-check`
 - **Formatting**: Use Tailwind CSS utilities, no custom CSS unless necessary
-- **Testing**: No Jest/Vitest configured; focus on integration testing via Playwright or manual testing
+- **Testing**: Vitest (`npm test`) — planner, quick-add parser, API routes against an in-memory Supabase with mocked Jira
 
 ## 🔄 Git Workflow
 
@@ -215,18 +103,14 @@ All user-facing text is **French**:
 
 ## 📚 Documentation Links
 
-- [README.md](README.md) — Project overview & architecture diagram
-- [app/daily-meeting/README.md](app/daily-meeting/README.md) — Daily meeting feature spec
-- [app/dashboard/README.md](app/dashboard/README.md) — Dashboard feature spec
-- [app/history/README.md](app/history/README.md) — History feature spec
-- [app/reports/README.md](app/reports/README.md) — Reports feature spec
-- [app/settings/README.md](app/settings/README.md) — Settings feature spec
+- [README.md](README.md) — Features, architecture, setup (Supabase, Google, Jira, Vercel)
+- [supabase/schema.sql](supabase/schema.sql) — Database schema
 
 ## 🤖 Agent Tips
 
 - **Always run `npm run type-check`** after code changes to catch type errors early.
 - **Test locally with `npm run dev`** before pushing.
 - **Check existing patterns** in similar components before creating new ones.
-- **Use the store as source of truth** — avoid prop drilling, lift state to store if needed across distant components.
+- **Supabase is the source of truth** — read with SWR hooks (`useDay`, `useRange`, `useMe`), write with the optimistic actions in `lib/client/data.ts`.
 - **French-first**: Assume all labels, messages, date displays are in French unless told otherwise.
 - **PWA considerations**: All features should work offline (with cached assets) or gracefully degrade.

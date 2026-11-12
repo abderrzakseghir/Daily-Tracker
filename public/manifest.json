@@ -1,27 +1,30 @@
 {
   "name": "Daily Tracker",
   "short_name": "DailyTracker",
-  "description": "Application de suivi quotidien pour les Daily Scrum",
+  "description": "Suivez vos tâches quotidiennes, planifiez-les et synchronisez-les avec Jira",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FAFAFA",
-  "theme_color": "#3B82F6",
-  "orientation": "portrait-primary",
+  "background_color": "#f6f7f9",
+  "theme_color": "#6366F1",
+  "orientation": "any",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "/icon-192.svg",
       "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any maskable"
+      "type": "image/svg+xml",
+      "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "/icon-512.svg",
       "sizes": "512x512",
-      "type": "image/png",
+      "type": "image/svg+xml",
       "purpose": "any maskable"
     }
   ],
-  "categories": ["productivity", "utilities"],
+  "categories": [
+    "productivity",
+    "utilities"
+  ],
   "lang": "fr",
   "dir": "ltr",
   "screenshots": [],
@@ -29,16 +32,35 @@
     {
       "name": "Aujourd'hui",
       "short_name": "Aujourd'hui",
-      "description": "Accéder au journal d'aujourd'hui",
       "url": "/dashboard",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icon-192.svg",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
-      "name": "Daily Meeting",
+      "name": "Planning",
+      "short_name": "Planning",
+      "url": "/planning",
+      "icons": [
+        {
+          "src": "/icon-192.svg",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Daily meeting",
       "short_name": "Daily",
-      "description": "Mode présentation pour Daily Scrum",
       "url": "/daily-meeting",
-      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icon-192.svg",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

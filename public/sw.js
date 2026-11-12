@@ -1,134 +1,83 @@
-const CACHE_NAME = 'daily-tracker-v1';
-const urlsToCache = [
-  '/',
-  '/dashboard',
-  '/history',
-  '/reports',
-  '/daily-meeting',
-  '/settings',
-];
+// Daily Tracker — service worker
+// - assets statiques : cache d'abord (versionnés par Next.js)
+// - pages : réseau d'abord, cache en secours (consultation hors ligne)
+// - API : jamais mises en cache (données toujours fraîches)
+const CACHE = 'daily-tracker-v2';
 
-// Install event
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('Opened cache');
-      return cache.addAll(urlsToCache);
-    })
-  );
-  self.skipWaiting();
-});
+self.addEventListener('install', () => self.skipWaiting());
 
-// Activate event
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            console.log('Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then(() => self.clients.claim()),
   );
-  self.clients.claim();
 });
 
-// Fetch event - Network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests
-  if (!event.request.url.startsWith(self.location.origin)) {
+  const { request } = event;
+  const url = new URL(request.url);
+  if (request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (url.pathname.startsWith('/api/')) return;
+
+  if (url.pathname.startsWith('/_next/static/') || /\.(svg|png|ico|woff2?)$/.test(url.pathname)) {
+    event.respondWith(
+      caches.match(request).then(
+        (cached) =>
+          cached ||
+          fetch(request).then((res) => {
+            if (res.ok) {
+              const copy = res.clone();
+              caches.open(CACHE).then((c) => c.put(request, copy));
+            }
+            return res;
+          }),
+      ),
+    );
     return;
   }
 
-  // Skip API requests
-  if (event.request.url.includes('/api/')) {
-    return;
+  if (request.mode === 'navigate') {
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          if (res.ok && !res.redirected) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put(request, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(request).then((r) => r || caches.match('/dashboard'))),
+    );
   }
-
-  event.respondWith(
-    fetch(event.request)
-      .then((response) => {
-        // Clone the response
-        const responseToCache = response.clone();
-
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
-        return response;
-      })
-      .catch(() => {
-        return caches.match(event.request);
-      })
-  );
 });
 
-// Push notification event
 self.addEventListener('push', (event) => {
   if (!event.data) return;
-
   const data = event.data.json();
-
-  const options = {
-    body: data.body || '',
-    icon: data.icon || '/icon-192.png',
-    badge: '/icon-192.png',
-    vibrate: [100, 50, 100],
-    data: {
-      url: data.data?.url || '/',
-    },
-    actions: [
-      {
-        action: 'open',
-        title: 'Ouvrir',
-      },
-      {
-        action: 'close',
-        title: 'Fermer',
-      },
-    ],
-  };
-
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Daily Tracker', options)
+    self.registration.showNotification(data.title || 'Daily Tracker', {
+      body: data.body || '',
+      icon: '/icon-192.svg',
+      badge: '/icon-192.svg',
+      data: { url: data.url || '/dashboard' },
+    }),
   );
 });
 
-// Notification click event
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-
-  if (event.action === 'close') return;
-
-  const url = event.notification.data?.url || '/';
-
+  const url = event.notification.data?.url || '/dashboard';
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // If a window is already open, focus it
-      for (const client of clientList) {
-        if (client.url === url && 'focus' in client) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((list) => {
+      for (const client of list) {
+        if ('focus' in client) {
+          client.navigate(url);
           return client.focus();
         }
       }
-      // Otherwise, open a new window
-      if (clients.openWindow) {
-        return clients.openWindow(url);
-      }
-    })
+      return clients.openWindow(url);
+    }),
   );
 });
-
-// Background sync for offline data
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-entries') {
-    event.waitUntil(syncEntries());
-  }
-});
-
-async function syncEntries() {
-  // This would sync offline entries when back online
-  console.log('Syncing entries...');
-}

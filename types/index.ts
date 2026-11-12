@@ -3,7 +3,7 @@
 // ============================================================
 
 // -------------------------
-// CATEGORIES & DURATIONS
+// CATEGORIES
 // -------------------------
 
 export const CATEGORIES = [
@@ -30,383 +30,269 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   other: 'Autre',
 };
 
+export const CATEGORY_EMOJIS: Record<Category, string> = {
+  development: '💻',
+  meeting: '🗣️',
+  support: '🛟',
+  training: '📚',
+  documentation: '📝',
+  research: '🔬',
+  personal: '🌿',
+  other: '✨',
+};
+
+/**
+ * Palette catégorielle validée (daltonisme, contraste) — ordre fixe, ne pas réordonner.
+ * Les versions sombres sont les mêmes teintes ajustées pour la surface sombre.
+ */
 export const CATEGORY_COLORS: Record<Category, string> = {
-  development: '#3B82F6', // blue
-  meeting: '#8B5CF6', // purple
-  support: '#F59E0B', // amber
-  training: '#10B981', // emerald
-  documentation: '#06B6D4', // cyan
-  research: '#EC4899', // pink
-  personal: '#6366F1', // indigo
-  other: '#6B7280', // gray
+  development: '#2a78d6',
+  meeting: '#eb6834',
+  support: '#1baf7a',
+  training: '#eda100',
+  documentation: '#e87ba4',
+  research: '#008300',
+  personal: '#6250d6',
+  other: '#e34948',
 };
 
-export const DURATIONS = ['15min', '30min', '1h', '2h', '3h', '4h', 'custom'] as const;
-
-export type Duration = (typeof DURATIONS)[number];
-
-export const DURATION_LABELS: Record<Duration, string> = {
-  '15min': '15 min',
-  '30min': '30 min',
-  '1h': '1 heure',
-  '2h': '2 heures',
-  '3h': '3 heures',
-  '4h': '4 heures',
-  custom: 'Personnalisé',
-};
-
-export const DURATION_MINUTES: Record<Duration, number> = {
-  '15min': 15,
-  '30min': 30,
-  '1h': 60,
-  '2h': 120,
-  '3h': 180,
-  '4h': 240,
-  custom: 0,
+export const CATEGORY_COLORS_DARK: Record<Category, string> = {
+  development: '#3987e5',
+  meeting: '#d95926',
+  support: '#199e70',
+  training: '#c98500',
+  documentation: '#d55181',
+  research: '#008300',
+  personal: '#9085e9',
+  other: '#e66767',
 };
 
 // -------------------------
-// TASKS
+// TASKS & DAYS
 // -------------------------
+
+export const TASK_STATUSES = ['todo', 'in_progress', 'done'] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
+
+export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
+  todo: 'À faire',
+  in_progress: 'En cours',
+  done: 'Terminée',
+};
 
 export interface Task {
   id: string;
-  description: string;
-  category: Category;
-  duration: Duration;
-  customDuration?: number; // in minutes, used when duration is 'custom'
-  completed: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface PlannedTask {
-  id: string;
-  description: string;
-  category: Category;
-  estimatedDuration?: Duration;
-  /** Minutes value when estimatedDuration is 'custom'. */
-  estimatedCustomDuration?: number;
-  createdAt: string;
-}
-
-// -------------------------
-// DAILY ENTRY
-// -------------------------
-
-export interface DailyEntry {
-  id: string;
-  date: string; // Format: YYYY-MM-DD
   userId: string;
-  tasks: Task[];
-  plannedTasks: PlannedTask[];
-  blockers: string;
-  validated: boolean;
-  validatedAt?: string;
+  date: string; // YYYY-MM-DD
+  title: string;
+  description: string;
+  category: Category;
+  /** Importance / effort de 1 à 10 — détermine la durée allouée. */
+  points: number;
+  status: TaskStatus;
+  position: number;
+  /** Durée forcée à la main (null = calculée à partir des points). */
+  manualDuration: number | null;
+  /** Durée effective calculée par le planificateur. */
+  durationMinutes: number;
+  /** "HH:MM" — horaire calculé (ou fixé si pinned). */
+  startTime: string | null;
+  /** true quand l'utilisateur a fixé l'horaire (glisser-déposer). */
+  pinned: boolean;
+  /** Temps réellement mesuré via le minuteur focus. */
+  actualMinutes: number;
+  jiraKey: string | null;
+  jiraUrl: string | null;
+  jiraProjectKey: string | null;
+  jiraWorklogId: string | null;
+  jiraSyncedMinutes: number | null;
+  /** "YYYY-MM-DD HH:MM" du dernier worklog envoyé. */
+  jiraSyncedStart: string | null;
+  jiraSyncedAt: string | null;
+  jiraSyncError: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface DailyEntryCreateInput {
+export interface TaskInput {
   date: string;
-  userId: string;
-  tasks?: Task[];
-  plannedTasks?: PlannedTask[];
-  blockers?: string;
+  title: string;
+  description?: string;
+  category?: Category;
+  points?: number;
+  status?: TaskStatus;
+  manualDuration?: number | null;
+  startTime?: string | null;
+  pinned?: boolean;
+  /** Crée aussi un ticket Jira dans ce projet. */
+  createInJiraProject?: string | null;
+  /** Lie la tâche à un ticket Jira existant. */
+  jiraKey?: string | null;
 }
 
-export interface DailyEntryUpdateInput {
-  tasks?: Task[];
-  plannedTasks?: PlannedTask[];
-  blockers?: string;
-  validated?: boolean;
+export type TaskPatch = Partial<
+  Pick<
+    Task,
+    | 'title'
+    | 'description'
+    | 'category'
+    | 'points'
+    | 'status'
+    | 'position'
+    | 'manualDuration'
+    | 'startTime'
+    | 'pinned'
+    | 'date'
+    | 'actualMinutes'
+  >
+>;
+
+export interface DayMeta {
+  date: string;
+  blockers: string;
+  notes: string;
+  mood: number | null;
+  energy: number | null;
+  validated: boolean;
+  validatedAt: string | null;
+}
+
+export interface DayData {
+  meta: DayMeta;
+  tasks: Task[];
+}
+
+export interface TaskTemplate {
+  id: string;
+  title: string;
+  category: Category;
+  points: number;
+  manualDuration: number | null;
+  startTime: string | null;
+  /** Jours ISO (1 = lundi … 7 = dimanche) où le modèle est ajouté automatiquement. */
+  weekdays: number[];
 }
 
 // -------------------------
 // USER
 // -------------------------
 
-export interface JiraConnection {
-  accountId: string;
-  displayName: string;
-  email: string;
-  cloudId: string;
-  cloudUrl: string;
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number; // Unix timestamp ms
+export interface UserSettings {
+  /** Début de journée "HH:MM" */
+  workdayStart: string;
+  /** Fin de journée "HH:MM" */
+  workdayEnd: string;
+  lunchEnabled: boolean;
+  lunchStart: string;
+  lunchEnd: string;
+  /**
+   * proportional : la journée est répartie entre les tâches au prorata des points.
+   * perPoint     : chaque point vaut `minutesPerPoint` minutes.
+   */
+  durationMode: 'proportional' | 'perPoint';
+  minutesPerPoint: number;
+  /** Jours travaillés (ISO 1..7). */
+  workdays: number[];
+  defaultCategory: Category;
+  defaultJiraProject: string | null;
+  /** Créer automatiquement un ticket Jira pour chaque nouvelle tâche. */
+  autoCreateJiraIssue: boolean;
+  /** Envoyer le worklog Jira quand une tâche passe à "Terminée". */
+  autoSyncWorklog: boolean;
+  /** Passer le ticket Jira dans une colonne "Terminé" quand la tâche est terminée. */
+  autoTransitionDone: boolean;
+  /** Durée d'une session focus (minutes). */
+  focusMinutes: number;
+  reminderEnabled: boolean;
+  /** Fuseau IANA — sert à dater correctement les worklogs Jira. */
+  timezone: string;
 }
 
-export interface JiraTicket {
-  key: string;          // "PROJ-123"
-  summary: string;
-  status: string;
-  priority: string;
-  project: string;
-  projectKey: string;
-  sprint?: string;
-  updatedAt: string;
-  url: string;
+export const DEFAULT_SETTINGS: UserSettings = {
+  workdayStart: '09:00',
+  workdayEnd: '18:00',
+  lunchEnabled: true,
+  lunchStart: '12:30',
+  lunchEnd: '14:00',
+  durationMode: 'proportional',
+  minutesPerPoint: 30,
+  workdays: [1, 2, 3, 4, 5],
+  defaultCategory: 'development',
+  defaultJiraProject: null,
+  autoCreateJiraIssue: false,
+  autoSyncWorklog: true,
+  autoTransitionDone: false,
+  focusMinutes: 25,
+  reminderEnabled: false,
+  timezone: 'Europe/Paris',
+};
+
+export interface JiraStatus {
+  connected: boolean;
+  displayName?: string;
+  email?: string | null;
+  avatar?: string | null;
+  siteName?: string | null;
+  cloudUrl?: string;
 }
 
 export interface User {
   id: string;
-  googleId: string;
   email: string;
   name: string;
-  avatar?: string;
-  jira?: JiraConnection;
+  avatar: string | null;
   settings: UserSettings;
-  gamification: UserGamification;
+  jira: JiraStatus;
   createdAt: string;
-  updatedAt: string;
-}
-
-export interface UserSettings {
-  theme: 'light' | 'dark' | 'system';
-  notificationsEnabled: boolean;
-  notificationTimes: string[]; // e.g., ['16:55', '17:30', '18:00']
-  language: 'fr' | 'en';
-  weekStartsOn: 0 | 1; // 0 = Sunday, 1 = Monday
-}
-
-export interface UserGamification {
-  level: number;
-  experience: number;
-  streak: number;
-  longestStreak: number;
-  totalTasks: number;
-  totalMinutes: number;
-  badges: Badge[];
-  lastActivityDate?: string;
 }
 
 // -------------------------
-// GAMIFICATION
+// JIRA
 // -------------------------
 
-export const BADGE_TYPES = [
-  'first_day',
-  'week_streak',
-  'month_streak',
-  'hundred_tasks',
-  'hundred_hours',
-  'early_bird',
-  'night_owl',
-  'perfect_week',
-] as const;
-
-export type BadgeType = (typeof BADGE_TYPES)[number];
-
-export interface Badge {
-  type: BadgeType;
-  earnedAt: string;
-}
-
-// -------------------------
-// TIMEBLOCKING (JIRA PLANNING)
-// -------------------------
-
-export interface PlannedJiraTicket extends JiraTicket {
-  /** User-defined importance score 1–10 (default: 5). */
-  importance: number;
-  /** Manually typed duration in minutes (null = auto-computed from importance). */
-  durationMinutes: number | null;
-  /** Day assigned to: "YYYY-MM-DD" or null (unscheduled). */
-  scheduledDate: string | null;
-  /** Start time assigned by autoScheduleTickets: "HH:MM" or null. */
-  scheduledStartTime: string | null;
-  /** Effective duration after auto-gen + proportional compression (always set). */
-  computedDurationMinutes: number;
-}
-
-export interface FrozenDaySchedule {
-  /** "YYYY-MM-DD" */
-  date: string;
-  /** Immutable snapshot of the schedule frozen by "Valider la journée". */
-  tickets: PlannedJiraTicket[];
-  frozenAt: string;
-}
-
-export interface BadgeDefinition {
-  type: BadgeType;
+export interface JiraProject {
+  key: string;
   name: string;
-  description: string;
-  icon: string;
-  requirement: string;
+  avatar?: string;
 }
 
-export const BADGES: BadgeDefinition[] = [
-  {
-    type: 'first_day',
-    name: 'Premier Pas',
-    description: 'Première journée complétée',
-    icon: '🎯',
-    requirement: 'Valider sa première journée',
-  },
-  {
-    type: 'week_streak',
-    name: 'Semaine Parfaite',
-    description: '7 jours consécutifs',
-    icon: '🔥',
-    requirement: 'Maintenir un streak de 7 jours',
-  },
-  {
-    type: 'month_streak',
-    name: 'Champion du Mois',
-    description: '30 jours consécutifs',
-    icon: '🏆',
-    requirement: 'Maintenir un streak de 30 jours',
-  },
-  {
-    type: 'hundred_tasks',
-    name: 'Centurion',
-    description: '100 tâches enregistrées',
-    icon: '💯',
-    requirement: 'Enregistrer 100 tâches',
-  },
-  {
-    type: 'hundred_hours',
-    name: 'Marathonien',
-    description: '100 heures documentées',
-    icon: '⏱️',
-    requirement: 'Documenter 100 heures de travail',
-  },
-  {
-    type: 'early_bird',
-    name: 'Lève-tôt',
-    description: 'Validation avant 9h',
-    icon: '🌅',
-    requirement: 'Valider une journée avant 9h',
-  },
-  {
-    type: 'night_owl',
-    name: 'Noctambule',
-    description: 'Validation après 22h',
-    icon: '🦉',
-    requirement: 'Valider une journée après 22h',
-  },
-  {
-    type: 'perfect_week',
-    name: 'Semaine Modèle',
-    description: '5 jours ouvrés consécutifs',
-    icon: '⭐',
-    requirement: 'Valider 5 jours ouvrés consécutifs',
-  },
-];
-
-// -------------------------
-// NOTIFICATIONS
-// -------------------------
-
-export interface NotificationSubscription {
-  endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
-}
-
-export interface UserNotification {
-  userId: string;
-  subscription: NotificationSubscription;
-  createdAt: string;
+export interface JiraIssue {
+  key: string;
+  summary: string;
+  status: string;
+  statusCategory: 'new' | 'indeterminate' | 'done' | string;
+  priority: string;
+  projectKey: string;
+  projectName: string;
+  issueType: string;
+  url: string;
+  updatedAt: string;
+  /** Temps déjà loggé (secondes) */
+  timeSpentSeconds: number;
 }
 
 // -------------------------
-// STATISTICS
+// STATS & REPORTS
 // -------------------------
 
-export interface DayStats {
-  date: string;
-  taskCount: number;
+export interface PeriodStats {
+  from: string;
+  to: string;
+  days: { date: string; minutes: number; tasks: number; done: number; points: number; validated: boolean; mood: number | null }[];
   totalMinutes: number;
-  validated: boolean;
-  categories: Record<Category, number>;
-}
-
-export interface WeekStats {
-  weekStart: string;
-  weekEnd: string;
   totalTasks: number;
-  totalMinutes: number;
+  doneTasks: number;
+  totalPoints: number;
   validatedDays: number;
-  dailyStats: DayStats[];
-  categoryBreakdown: Record<Category, number>;
-}
-
-export interface MonthStats {
-  month: string; // YYYY-MM
-  totalTasks: number;
-  totalMinutes: number;
-  validatedDays: number;
-  weeklyStats: WeekStats[];
-  categoryBreakdown: Record<Category, number>;
+  byCategory: Record<Category, number>;
 }
 
 // -------------------------
-// REPORTS
-// -------------------------
-
-export type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'custom';
-
-export interface ReportConfig {
-  period: ReportPeriod;
-  startDate: string;
-  endDate: string;
-  includeCategories?: Category[];
-  includeLogo?: boolean;
-  title?: string;
-  comments?: string;
-}
-
-export interface ReportData {
-  config: ReportConfig;
-  entries: DailyEntry[];
-  stats: {
-    totalTasks: number;
-    totalMinutes: number;
-    validatedDays: number;
-    categoryBreakdown: Record<Category, number>;
-  };
-  generatedAt: string;
-}
-
-// -------------------------
-// API RESPONSES
+// API
 // -------------------------
 
 export interface ApiResponse<T = unknown> {
   success: boolean;
   data?: T;
   error?: string;
-  message?: string;
-}
-
-export interface PaginatedResponse<T> extends ApiResponse<T[]> {
-  pagination: {
-    page: number;
-    limit: number;
-    total: number;
-    totalPages: number;
-  };
-}
-
-// -------------------------
-// SEARCH
-// -------------------------
-
-export interface SearchQuery {
-  keyword?: string;
-  categories?: Category[];
-  dateFrom?: string;
-  dateTo?: string;
-  validated?: boolean;
-}
-
-export interface SearchResult {
-  entry: DailyEntry;
-  matchedTasks: Task[];
-  matchedPlannedTasks: PlannedTask[];
-  score: number;
 }

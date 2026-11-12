@@ -1,40 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
+import { getAppUrl, isNonCanonicalHost, isProd, jiraRedirectUri } from '@/lib/server/env';
+import { JIRA_SCOPES } from '@/lib/server/jira';
+import { SESSION_COOKIE, verifySession } from '@/lib/server/session';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
+  const appUrl = getAppUrl(req);
   const clientId = process.env.JIRA_CLIENT_ID;
-  const appUrl = req.nextUrl.origin; // always correct, no env var needed
+  if (!clientId) return NextResponse.redirect(`${appUrl}/settings?jira=error&reason=not_configured`);
 
-  if (!clientId) {
-    return NextResponse.json(
-      { error: 'JIRA_CLIENT_ID not configured' },
-      { status: 500 }
-    );
+  if (isNonCanonicalHost(req)) {
+    return NextResponse.redirect(`${appUrl}/api/auth/jira`);
+  }
+  if (!(await verifySession(req.cookies.get(SESSION_COOKIE)?.value))) {
+    return NextResponse.redirect(`${appUrl}/?error=session`);
   }
 
-  const state = crypto.randomBytes(16).toString('hex');
-
+  const state = crypto.randomUUID();
   const params = new URLSearchParams({
     audience: 'api.atlassian.com',
     client_id: clientId,
-    scope: 'read:jira-user read:jira-work write:jira-work offline_access read:account',
-    redirect_uri: `${appUrl}/api/auth/jira/callback`,
+    scope: JIRA_SCOPES,
+    redirect_uri: jiraRedirectUri(req),
     state,
     response_type: 'code',
     prompt: 'consent',
   });
 
-  const response = NextResponse.redirect(
-    `https://auth.atlassian.com/authorize?${params}`
-  );
-
-  // Short-lived state cookie to prevent CSRF
+  const response = NextResponse.redirect(`https://auth.atlassian.com/authorize?${params}`);
   response.cookies.set('jira_oauth_state', state, {
     httpOnly: true,
+    secure: isProd,
     sameSite: 'lax',
-    maxAge: 300,
+    maxAge: 600,
     path: '/',
   });
-
   return response;
 }

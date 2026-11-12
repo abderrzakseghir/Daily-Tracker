@@ -1,252 +1,131 @@
-# 📊 Daily Tracker
+# Daily Tracker
 
-**Application mobile-first pour préparer vos Daily Scrum en toute simplicité.**
+Application web (PWA) pour suivre ses tâches quotidiennes, les planifier sur un calendrier
+et les synchroniser avec Jira. Pensée pour préparer les Daily Scrum. Interface en français,
+mobile et desktop.
 
-![Next.js](https://img.shields.io/badge/Next.js-14-black)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue)
-![Tailwind CSS](https://img.shields.io/badge/Tailwind-3.4-38bdf8)
-![PWA](https://img.shields.io/badge/PWA-Ready-purple)
+## Fonctionnalités
 
-## 🎯 À propos
+| | |
+|---|---|
+| **Journée** | Ajout rapide en langage naturel, points de 1 à 10 par tâche, durée calculée automatiquement, liste réordonnable par glisser-déposer, agenda du jour, humeur / énergie, bloquants, notes, validation de la journée |
+| **Planning** | Calendrier semaine / jours ouvrés / jour : tâches en cartes placées aux bons horaires, glisser-déposer (heure et jour), redimensionnement de la durée, pause déjeuner, ligne « maintenant » |
+| **Jira** | Connexion OAuth, création de tickets depuis les tâches (assignés, avec estimation), liaison à un ticket existant, import de ses tickets, worklog automatique quand une tâche est terminée et mis à jour si la durée ou l'horaire change, passage optionnel du ticket à « Terminé » |
+| **Historique** | Calendrier mensuel façon heatmap, séries de jours validés, recherche plein texte, modification de n'importe quelle journée passée |
+| **Rapports** | Temps réalisé par jour et par catégorie, répartition, humeur et énergie, top tickets Jira, tableau détaillé, export PDF et CSV |
+| **Daily meeting** | Hier / aujourd'hui / bloquants, mode présentation, copie formatée pour Slack ou Teams, chrono de parole |
+| **Au quotidien** | Minuteur focus (temps mesuré par tâche), tâches récurrentes (daily, revue…), report des tâches non terminées, rappel push de fin de journée, raccourcis clavier, mode sombre, export JSON |
 
-Daily Tracker est une application web progressive (PWA) conçue pour les développeurs et équipes agiles. Elle permet de :
+### Points → temps
 
-- ✅ **Tracker ses tâches** quotidiennes par catégorie
-- 📋 **Planifier** les tâches du lendemain
-- 🎤 **Présenter** son daily en mode optimisé
-- 📄 **Exporter** des rapports PDF professionnels
-- 🔥 **Maintenir** un streak de productivité
-- 🏆 **Gagner** des badges et monter en niveau
+Chaque tâche reçoit des points de 1 à 10. Deux modes au choix (Paramètres) :
 
-## 🏗️ Architecture globale
+- **Répartir la journée** (par défaut) : la capacité de la journée, pause déduite, est partagée
+  au prorata des points entre les tâches sans durée forcée. Exemple sur 7h30 : 6 / 3 / 1 points
+  donnent 4h30 / 2h15 / 45 min.
+- **Minutes par point** : durée = points × N minutes.
 
-```mermaid
-graph TB
-    subgraph "Frontend - Next.js 14"
-        A[App Router] --> B[Pages]
-        B --> B1[Dashboard]
-        B --> B2[History]
-        B --> B3[Daily Meeting]
-        B --> B4[Reports]
-        B --> B5[Settings]
-        
-        A --> C[Components]
-        C --> C1[UI Components]
-        C --> C2[Feature Components]
-        C --> C3[Layout Components]
-    end
-    
-    subgraph "State Management"
-        D[Zustand Store] --> E[Persist Middleware]
-        E --> F[LocalStorage]
-    end
-    
-    subgraph "PWA"
-        G[Service Worker] --> H[Push Notifications]
-        G --> I[Offline Mode]
-    end
-    
-    B --> D
-```
+Les tâches s'enchaînent depuis le début de journée et sont découpées autour de la pause
+déjeuner et des tâches à horaire fixe. Une tâche déplacée sur le calendrier garde son horaire.
 
-## 📂 Structure du projet
+### Ajout rapide
 
 ```
-📁 daily-tracker/
-├── 📁 app/
-│   ├── 📁 dashboard/       # Page principale
-│   │   └── README.md       # Documentation
-│   ├── 📁 history/         # Historique calendrier
-│   │   └── README.md
-│   ├── 📁 daily-meeting/   # Mode présentation
-│   │   └── README.md
-│   ├── 📁 reports/         # Export PDF
-│   │   └── README.md
-│   ├── 📁 settings/        # Paramètres
-│   │   └── README.md
-│   ├── 📁 api/             # Routes API
-│   ├── layout.tsx          # Layout principal
-│   └── page.tsx            # Login
-├── 📁 components/
-│   ├── 📁 ui/              # Composants réutilisables
-│   ├── 📁 features/        # Composants métier
-│   └── 📁 layout/          # Navigation, AppLayout
-├── 📁 lib/
-│   ├── store.ts            # Store Zustand
-│   └── utils.ts            # Utilitaires
-├── 📁 types/
-│   └── index.ts            # Types TypeScript
-├── 📁 public/
-│   ├── manifest.json       # PWA manifest
-│   └── sw.js               # Service worker
-└── README.md
+Corriger le login !7 #dev 1h30 @14h +PROJ
 ```
 
-## 🚀 Installation
+`!7` points · `#réunion` catégorie · `1h30` durée forcée · `@14h` horaire fixe ·
+`+PROJ` crée le ticket Jira · `PROJ-123` lie un ticket existant.
+
+Raccourcis : `N` nouvelle tâche · `←` `→` jour précédent / suivant · `T` aujourd'hui.
+
+## Architecture
+
+```
+Navigateur (Next.js, React, SWR)
+   │  cookie de session httpOnly signé (HMAC)
+   ▼
+Routes API Next.js (Vercel) ──► Supabase Postgres (clé service_role, RLS fermé)
+   │
+   ├──► Google OAuth 2.0 (connexion)
+   └──► Jira Cloud REST v3 (OAuth 3LO, jetons stockés côté serveur, rafraîchis automatiquement)
+```
+
+- `app/` : pages et routes API (`app/api/*` renvoient toujours `{ success, data?, error? }`)
+- `lib/planner.ts` : calcul points → durées → horaires (partagé client/serveur, testé)
+- `lib/server/` : session, Supabase, Jira, accès aux données (serveur uniquement)
+- `lib/client/data.ts` : hooks SWR et actions avec mises à jour optimistes
+- `components/features/` : calendrier, vue Journée, éditeur, import Jira…
+- `supabase/schema.sql` : schéma de la base
+
+## Mise en route
+
+### 1. Supabase
+
+1. Créez un projet sur [supabase.com](https://supabase.com) (l'offre gratuite suffit).
+2. **SQL Editor** : collez puis exécutez [`supabase/schema.sql`](supabase/schema.sql).
+3. **Project Settings → API** : récupérez l'URL du projet et la clé `service_role`.
+
+> Astuce : l'intégration Supabase du Marketplace Vercel renseigne ces variables automatiquement.
+
+### 2. Google OAuth (connexion)
+
+Dans [Google Cloud Console → Identifiants](https://console.cloud.google.com/apis/credentials),
+ouvrez votre client OAuth « Application Web », puis :
+
+- **Origines JavaScript autorisées** : `https://votre-app.vercel.app` et `http://localhost:3000`
+- **URI de redirection autorisées**, à recopier exactement :
+  - `https://votre-app.vercel.app/api/auth/google/callback`
+  - `http://localhost:3000/api/auth/google/callback`
+
+> **Erreur `redirect_uri_mismatch` ?** L'URI envoyée à Google est maintenant toujours
+> `APP_URL + /api/auth/google/callback`. Ouvrez `/api/health` sur votre site : il affiche
+> l'URI exacte à déclarer.
+
+Si l'écran de consentement est en mode « Test », ajoutez chaque utilisateur (10 maximum) dans
+**Utilisateurs test**, ou publiez l'application.
+
+### 3. Jira (optionnel)
+
+Sur [developer.atlassian.com → My apps](https://developer.atlassian.com/console/myapps/), dans
+votre app OAuth 2.0 (3LO) :
+
+- **Authorization → Callback URL** : `https://votre-app.vercel.app/api/auth/jira/callback`.
+  Atlassian n'accepte qu'une seule URL : utilisez une app distincte pour le local si besoin.
+- **Permissions → Jira API** : `read:jira-user`, `read:jira-work`, `write:jira-work`,
+  plus `read:account` (User identity API).
+
+### 4. Variables d'environnement
+
+Copiez [`.env.example`](.env.example) en `.env.local` pour le local. Sur Vercel, ajoutez les
+mêmes variables dans **Settings → Environment Variables** :
+
+| Variable | Obligatoire | Rôle |
+|---|---|---|
+| `APP_URL` | ✅ | URL publique canonique, sans `/` final |
+| `SESSION_SECRET` | ✅ | 32+ caractères aléatoires |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | ✅ | Connexion Google |
+| `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Base de données |
+| `JIRA_CLIENT_ID`, `JIRA_CLIENT_SECRET` | Jira | Intégration Jira |
+| `ALLOWED_EMAILS` | — | Liste blanche d'e-mails (séparés par des virgules) |
+| `MAX_USERS` | — | 10 par défaut |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `CRON_SECRET` | — | Rappel push de fin de journée (cron dans `vercel.json`) |
+
+Redéployez après chaque modification de variable.
+
+### 5. Lancer
 
 ```bash
-# Cloner le repo
-git clone https://github.com/abderrzakseghir/Daily-Tracker.git
-cd Daily-Tracker
-
-# Installer les dépendances
 npm install
-
-# Lancer en développement
-npm run dev
+npm run dev         # http://localhost:3000
+npm test            # tests (planificateur, saisie rapide, API + synchro Jira simulée)
+npm run type-check
+npm run lint
+npm run build
 ```
 
-L'application sera disponible sur [http://localhost:3000](http://localhost:3000)
+### Migration depuis l'ancienne version
 
-## 🔧 Scripts disponibles
-
-| Commande | Description |
-|----------|-------------|
-| `npm run dev` | Démarre le serveur de développement |
-| `npm run build` | Build de production |
-| `npm run start` | Lance le serveur de production |
-| `npm run lint` | Analyse le code avec ESLint |
-
-## 📱 Flux utilisateur principal
-
-```mermaid
-flowchart TD
-    A[Login / Créer compte] --> B[Dashboard]
-    
-    B --> C{Journée en cours}
-    C --> D[Ajouter tâches]
-    C --> E[Planifier demain]
-    C --> F[Noter blocages]
-    
-    D --> G[Valider journée]
-    E --> G
-    F --> G
-    
-    G --> H{Streak +1 🔥}
-    H --> I[Gamification Update]
-    I --> J{Nouveau badge ?}
-    J -->|Oui| K[Notification 🏆]
-    J -->|Non| L[Fin]
-    K --> L
-    
-    B --> M[Historique]
-    M --> N[Modifier jour passé]
-    N --> O{Jour validé ?}
-    O -->|Non| P[Éditer directement]
-    O -->|Oui| Q[Confirmer déverrouillage]
-    Q --> P
-    
-    B --> R[Daily Meeting]
-    R --> S[Présenter au daily]
-    
-    B --> T[Rapports]
-    T --> U[Générer PDF]
-```
-
-## 🎮 Système de gamification
-
-```mermaid
-graph LR
-    subgraph "Progression"
-        A[Tâche complétée] -->|+5 XP| B[XP Total]
-        C[Journée validée] -->|+10 XP| B
-        D[Streak maintenu] -->|+20 XP| B
-        
-        B --> E{Level Up ?}
-        E -->|XP >= 100| F[Niveau +1]
-        F --> G[XP reset]
-    end
-    
-    subgraph "Badges"
-        H[first_task] --> I["Première tâche 🌱"]
-        J[streak_3] --> K["3 jours consécutifs 🔥"]
-        L[streak_7] --> M["7 jours consécutifs 💪"]
-        N[productive_50] --> O["50 tâches 🚀"]
-    end
-```
-
-## 🛠️ Technologies
-
-| Technologie | Usage |
-|-------------|-------|
-| **Next.js 14** | Framework React avec App Router |
-| **TypeScript** | Typage statique |
-| **Tailwind CSS** | Styling utilitaire |
-| **Zustand** | State management |
-| **Chart.js** | Graphiques |
-| **jsPDF** | Génération PDF |
-| **date-fns** | Manipulation de dates |
-| **Framer Motion** | Animations |
-| **Lucide React** | Icônes |
-
-## 📖 Documentation par page
-
-Chaque page dispose de sa propre documentation avec diagrammes Mermaid :
-
-- [Dashboard](app/dashboard/README.md) - Page principale
-- [Historique](app/history/README.md) - Calendrier et édition
-- [Daily Meeting](app/daily-meeting/README.md) - Mode présentation
-- [Rapports](app/reports/README.md) - Export PDF
-- [Paramètres](app/settings/README.md) - Configuration
-
-## 🔐 Sécurité
-
-- Authentification par code PIN (4-6 chiffres)
-- Données stockées localement dans le localStorage
-- Aucune donnée envoyée à un serveur externe par défaut
-
-## Variables d'environnement (optionnel)
-
-Créez un fichier `.env.local` pour activer les fonctionnalités cloud :
-
-```env
-# Vercel Blob Storage (optionnel)
-BLOB_READ_WRITE_TOKEN=votre_token
-
-# Web Push (optionnel)
-NEXT_PUBLIC_VAPID_PUBLIC_KEY=votre_cle_publique
-VAPID_PRIVATE_KEY=votre_cle_privee
-VAPID_SUBJECT=mailto:votre@email.com
-```
-
-## 🎨 Thème
-
-L'application supporte le mode sombre/clair avec trois options :
-- 🌙 **Sombre** - Interface dark
-- ☀️ **Clair** - Interface light
-- 💻 **Système** - Suit les préférences OS
-
-## 📱 PWA
-
-Daily Tracker est installable comme application native :
-
-1. Ouvrir l'application dans Chrome/Edge
-2. Cliquer sur "Installer" dans la barre d'adresse
-3. L'app apparaît dans vos applications
-
-### Fonctionnalités PWA
-
-- ✅ Installation sur écran d'accueil
-- ✅ Fonctionnement hors-ligne
-- ✅ Notifications push (rappels de validation)
-- ✅ Icônes adaptatives
-
-## 📊 Flux de données
-
-```mermaid
-graph LR
-    A[User Input] --> B[Zustand Store]
-    B --> C[Persist Middleware]
-    C --> D[LocalStorage]
-    D --> C
-    C --> B
-    B --> E[React Components]
-```
-
-## 📄 Licence
-
-MIT - Libre d'utilisation et de modification.
-
----
-
-Développé avec ❤️ pour les équipes agiles
+Les données de l'ancienne version étaient stockées dans le navigateur. À la première connexion,
+la vue Journée propose de les **importer** dans votre compte (tâches, durées, bloquants,
+validations).
