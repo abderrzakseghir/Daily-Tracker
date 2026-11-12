@@ -12,6 +12,7 @@ const taskRoute = await import('@/app/api/tasks/[id]/route');
 const dayRoute = await import('@/app/api/days/[date]/route');
 const carryRoute = await import('@/app/api/days/[date]/carry-over/route');
 const meRoute = await import('@/app/api/me/route');
+const exportRoute = await import('@/app/api/jira/export/route');
 
 const USER = '11111111-1111-1111-1111-111111111111';
 const DATE = '2026-11-10';
@@ -34,13 +35,14 @@ async function call(handler: any, method: string, url: string, body?: unknown, p
 const jiraCalls: { method: string; url: string; body: any }[] = [];
 function mockJira() {
   let worklogSeq = 0;
+  let issueSeq = 0;
   vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET';
     const body = init.body ? JSON.parse(String(init.body)) : undefined;
     jiraCalls.push({ method, url, body });
     const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
     if (url.includes('/issuetypes')) return json({ issueTypes: [{ id: '10001', name: 'Task', subtask: false }] });
-    if (url.endsWith('/rest/api/3/issue') && method === 'POST') return json({ key: 'DT-1' }, 201);
+    if (url.endsWith('/rest/api/3/issue') && method === 'POST') return json({ key: `DT-${++issueSeq}` }, 201);
     if (url.includes('/worklog') && method === 'POST') return json({ id: String(++worklogSeq) }, 201);
     if (url.includes('/worklog/') && method === 'PUT') return json({ id: url.split('/worklog/')[1].split('?')[0] });
     if (url.includes('/worklog/') && method === 'DELETE') return new Response(null, { status: 204 });
@@ -175,6 +177,42 @@ describe('Synchronisation Jira', () => {
     await call(taskRoute.PATCH, 'PATCH', '/x', { status: 'todo' }, { id: task.id });
     expect(jiraCalls.some((c) => c.method === 'DELETE' && c.url.includes('/worklog/1'))).toBe(true);
     expect(dayTasks()[0].jira_worklog_id).toBeNull();
+  });
+
+  it('exporte la journée vers Jira puis ne crée que les nouvelles tâches', async () => {
+    const a = await call(tasksRoute.POST, 'POST', '/api/tasks', { date: DATE, title: 'API', points: 5 });
+    await call(tasksRoute.POST, 'POST', '/api/tasks', { date: DATE, title: 'Front', points: 5 });
+    await call(taskRoute.PATCH, 'PATCH', '/x', { status: 'done' }, { id: a.json.data.taskId });
+
+    const r = await call(exportRoute.POST, 'POST', '/api/jira/export', { date: DATE, projectKey: 'DT' });
+    expect(r.json.data).toMatchObject({ created: 2, linked: 2 });
+    const creations = jiraCalls.filter((c) => c.method === 'POST' && c.url.endsWith('/rest/api/3/issue'));
+    expect(creations.map((c) => c.body.fields.timetracking)).toEqual([
+      { originalEstimate: '225m' },
+      { originalEstimate: '225m' },
+    ]);
+    expect(jiraCalls.filter((c) => c.url.includes('/issuetypes'))).toHaveLength(1);
+    expect(dayTasks().every((t) => t.jira_key)).toBe(true);
+    // Seule la tâche terminée reçoit un worklog, à son horaire planifié
+    const worklogs = jiraCalls.filter((c) => c.method === 'POST' && c.url.includes('/worklog'));
+    expect(worklogs).toHaveLength(1);
+    expect(worklogs[0].body).toMatchObject({ started: '2026-11-10T09:00:00.000+0100', timeSpentSeconds: 225 * 60 });
+
+    // Nouvelle tâche ajoutée ensuite → un seul ticket de plus
+    await call(tasksRoute.POST, 'POST', '/api/tasks', { date: DATE, title: 'Doc', points: 2 });
+    jiraCalls.length = 0;
+    const again = await call(exportRoute.POST, 'POST', '/api/jira/export', { date: DATE, projectKey: 'DT' });
+    expect(again.json.data).toMatchObject({ created: 1, linked: 3 });
+    const second = jiraCalls.filter((c) => c.method === 'POST' && c.url.endsWith('/rest/api/3/issue'));
+    expect(second.map((c) => c.body.fields.summary)).toEqual(['Doc']);
+    expect(new Set(dayTasks().map((t) => t.jira_key)).size).toBe(3);
+  });
+
+  it("refuse l'export sans projet quand des tickets sont à créer", async () => {
+    await call(tasksRoute.POST, 'POST', '/api/tasks', { date: DATE, title: 'A' });
+    const r = await call(exportRoute.POST, 'POST', '/api/jira/export', { date: DATE, projectKey: '' });
+    expect(r.status).toBe(400);
+    expect(jiraCalls.some((c) => c.url.endsWith('/rest/api/3/issue'))).toBe(false);
   });
 
   it("enregistre l'erreur Jira sans bloquer la tâche", async () => {

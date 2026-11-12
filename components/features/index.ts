@@ -3,6 +3,7 @@ export { DayJournal } from './day-journal';
 export { DayView } from './day-view';
 export { FocusTimer } from './focus-timer';
 export { JiraChip, JiraLogo, jiraSyncState } from './jira-chip';
+export { JiraExportModal } from './jira-export-modal';
 export { JiraImportModal } from './jira-import-modal';
 export { QuickAdd } from './quick-add';
 export { TaskEditor, type TaskDraft } from './task-editor';

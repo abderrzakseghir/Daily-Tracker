@@ -18,6 +18,7 @@ import {
 import { Button, EmptyState, Segmented, Skeleton } from '@/components/ui';
 import { CalendarGrid } from './calendar-grid';
 import { DayJournal } from './day-journal';
+import { JiraExportModal } from './jira-export-modal';
 import { JiraImportModal } from './jira-import-modal';
 import { JiraLogo, jiraSyncState } from './jira-chip';
 import { QuickAdd } from './quick-add';
@@ -57,6 +58,7 @@ function DayContent({ date, user }: { date: string; user: User }) {
   const isPast = date < today;
   const [editing, setEditing] = React.useState<Task | TaskDraft | null>(null);
   const [importOpen, setImportOpen] = React.useState(false);
+  const [exportOpen, setExportOpen] = React.useState(false);
   const [mobileTab, setMobileTab] = React.useState<'list' | 'agenda'>('list');
   const startFocus = useUi((s) => s.startFocus);
   const focus = useUi((s) => s.focus);
@@ -97,6 +99,7 @@ function DayContent({ date, user }: { date: string; user: User }) {
   const capacity = dayCapacity(settings);
   const focusMinutes = tasks.reduce((s, t) => s + t.actualMinutes, 0);
   const pendingJira = tasks.filter((t) => ['pending', 'error'].includes(jiraSyncState(t))).length;
+  const notOnJira = tasks.filter((t) => !t.jiraKey).length;
   const unfinished = tasks.length - done.length;
   const progress = totalPoints > 0 ? donePoints / totalPoints : 0;
 
@@ -262,6 +265,16 @@ function DayContent({ date, user }: { date: string; user: User }) {
                 <JiraLogo className="h-3.5 w-3.5 text-[#0052CC] dark:text-[#4C9AFF]" /> Importer de Jira
               </Button>
             )}
+            {user.jira.connected && tasks.length > 0 && (
+              <Button variant="outline" size="sm" onClick={() => setExportOpen(true)}>
+                <JiraLogo className="h-3.5 w-3.5 text-[#0052CC] dark:text-[#4C9AFF]" /> Exporter vers Jira
+                {notOnJira > 0 && (
+                  <span className="rounded-md bg-[#0052CC]/10 px-1.5 text-[11px] font-semibold tabular-nums text-[#0052CC] dark:bg-[#4C9AFF]/15 dark:text-[#4C9AFF]">
+                    {notOnJira}
+                  </span>
+                )}
+              </Button>
+            )}
             {user.jira.connected && pendingJira > 0 && (
               <Button variant="outline" size="sm" onClick={() => syncDay(date)}>
                 <RefreshCw className="h-3.5 w-3.5" /> Synchroniser Jira ({pendingJira})
@@ -328,6 +341,15 @@ function DayContent({ date, user }: { date: string; user: User }) {
           onClose={() => setImportOpen(false)}
           date={date}
           existingKeys={new Set(tasks.map((t) => t.jiraKey).filter(Boolean) as string[])}
+        />
+      )}
+      {user.jira.connected && (
+        <JiraExportModal
+          isOpen={exportOpen}
+          onClose={() => setExportOpen(false)}
+          date={date}
+          tasks={tasks}
+          defaultProject={settings.defaultJiraProject}
         />
       )}
     </div>

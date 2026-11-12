@@ -201,7 +201,7 @@ function adf(text: string) {
   };
 }
 
-async function pickIssueType(userId: string, projectKey: string): Promise<string> {
+export async function pickIssueType(userId: string, projectKey: string): Promise<string> {
   const data = await jiraFetch<{ issueTypes?: any[]; values?: any[] }>(
     userId,
     `/rest/api/3/issue/createmeta/${encodeURIComponent(projectKey)}/issuetypes`,
@@ -221,10 +221,16 @@ async function pickIssueType(userId: string, projectKey: string): Promise<string
  */
 export async function createIssue(
   userId: string,
-  input: { projectKey: string; summary: string; description?: string; estimateMinutes?: number },
+  input: {
+    projectKey: string;
+    summary: string;
+    description?: string;
+    estimateMinutes?: number;
+    issueTypeId?: string;
+  },
 ): Promise<{ key: string; url: string }> {
   const conn = await freshConnection(userId);
-  const issueTypeId = await pickIssueType(userId, input.projectKey);
+  const issueTypeId = input.issueTypeId ?? (await pickIssueType(userId, input.projectKey));
 
   const base: Record<string, unknown> = {
     project: { key: input.projectKey },
