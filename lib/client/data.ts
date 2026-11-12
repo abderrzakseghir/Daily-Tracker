@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import useSWR, { useSWRConfig, type ScopedMutator } from 'swr';
 import { api, fetcher } from './api';
 import { applyPlan } from '@/lib/planner';
@@ -79,12 +80,18 @@ export function useDayMetas(from: string | null, to: string | null) {
 
 export function useDay(date: string) {
   const { data, error, isLoading } = useRange(date, date);
-  const day: DayData | undefined = data
-    ? {
-        meta: data.days.find((d) => d.date === date) ?? emptyMeta(date),
-        tasks: data.tasks.filter((t) => t.date === date),
-      }
-    : undefined;
+  // Référence stable tant que les données ne changent pas : les composants
+  // qui dépendent de `day` dans un useEffect ne doivent pas boucler.
+  const day = useMemo<DayData | undefined>(
+    () =>
+      data
+        ? {
+            meta: data.days.find((d) => d.date === date) ?? emptyMeta(date),
+            tasks: data.tasks.filter((t) => t.date === date),
+          }
+        : undefined,
+    [data, date],
+  );
   return { day, error, isLoading };
 }
 
